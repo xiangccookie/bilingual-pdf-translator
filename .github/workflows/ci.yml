@@ -1,0 +1,40 @@
+name: ci
+
+# 每次推送 / PR 做最基本的体检：源码能编译、能导入、命令行能跑起来
+on:
+  push:
+    branches: [main, master]
+  pull_request: {}
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 语法检查
+        shell: pwsh
+        run: |
+          python -m py_compile src/bi_app.py src/pdf_bilingual.py src/argos_backend.py src/mt_translate.py
+          Write-Host "语法检查通过"
+
+      - name: 导入检查 + 分句器自测
+        shell: pwsh
+        run: |
+          python -c "import sys; sys.path.insert(0,'src'); import pdf_bilingual as pb; print('split_sentences:', pb.split_sentences('A. B is here. C? D!'))"
+
+      - name: 造测试 PDF 并跑在线引擎的流程（不验证译文质量，只验证排版链路）
+        shell: pwsh
+        run: |
+          python -c "import pymupdf; d=pymupdf.open(); p=d.new_page(); p.insert_text((72,100),'This is a test sentence. It has two sentences.', fontsize=11); d.save('sample.pdf')"
+          python src/bi_app.py --batch-out out --backend mymemory --naming orig sample.pdf
+        continue-on-error: true   # 在线接口可能限流，不因为外部服务把 CI 判红

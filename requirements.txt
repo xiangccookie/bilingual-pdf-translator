@@ -1,0 +1,11 @@
+# 运行期依赖
+pymupdf>=1.24        # 解析 PDF、取文字与图片
+reportlab>=4.0       # 生成双语 PDF（含中文字体）
+Pillow>=10.0         # reportlab 插图用
+numpy>=1.24          # 间接依赖
+
+# 离线翻译：直接调用 CTranslate2 + sentencepiece 跑 Argos 的模型。
+# **不依赖 argostranslate**：它的分句器会在运行时联网下模型（离线机器上直接崩），
+# 并且用 settings.data_dir / package_dirs 两套机制，打包后极难伺候。
+ctranslate2>=4.0
+sentencepiece>=0.2.0

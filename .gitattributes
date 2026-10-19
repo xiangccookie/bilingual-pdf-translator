@@ -1,0 +1,17 @@
+# 统一换行风格：仓库里存 LF，Windows 的 PowerShell 脚本检出成 CRLF
+* text=auto
+*.py   text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.txt  text eol=lf
+*.ps1  text eol=crlf
+
+# 二进制
+*.argosmodel binary
+*.zip binary
+*.pdf binary
+*.png binary
+*.exe binary
+*.dll binary
+*.bin binary
+*.model binary

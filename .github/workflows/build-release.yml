@@ -1,0 +1,94 @@
+name: build-release
+
+# 打 tag（v1.0.0 这种）时自动打包 Windows exe 并挂到 Release
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}      # 也可以在 Actions 页面手动点一下跑
+
+permissions:
+  contents: write            # 需要写入 Release
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 取出源码
+        uses: actions/checkout@v4
+
+      - name: 装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: 下载离线模型（67.5 MB，不进仓库）
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path assets | Out-Null
+          $url = "https://argos-net.com/v1/translate-en_zh-1_9.argosmodel"
+          Write-Host "下载 $url"
+          Invoke-WebRequest -Uri $url -OutFile "assets/translate-en_zh.argosmodel" -TimeoutSec 600
+          $len = (Get-Item "assets/translate-en_zh.argosmodel").Length
+          Write-Host "模型大小 $len 字节"
+          if ($len -lt 50MB) { throw "模型文件异常（太小的文件说明下载失败）" }
+
+      - name: 打包成单文件 exe
+        shell: pwsh
+        run: |
+          # 说明：
+          #  --add-data 把模型塞进 exe；首次运行会自动装到用户目录，所以目标机器无需联网
+          #  --exclude-module 排掉 torch/spacy/stanza/minisbd：本项目自己分句，用不到它们，
+          #                    排掉能省约 164 MB（否则 exe 会超过 1 GB）
+          pyinstaller --onedir --console `
+            --name "双语PDF翻译器" `
+            --paths src `
+            --add-data "assets/translate-en_zh.argosmodel;assets" `
+            --collect-submodules reportlab --collect-data reportlab `
+            --runtime-hook tools/runtime_hook.py `
+            --collect-submodules ctranslate2 --collect-submodules sentencepiece `
+            --exclude-module argostranslate --exclude-module torch --exclude-module spacy --exclude-module stanza `
+            --exclude-module minisbd --exclude-module thinc --exclude-module onnxruntime `
+            --exclude-module weasel --exclude-module typer `
+            src/bi_app.py
+
+      - name: 冒烟测试（命令行自检，验证打包完整）
+        shell: pwsh
+        run: |
+          # 造一个 2 页的测试 PDF，然后让它按「本地离线」跑一遍，只验流程能不能跑通
+          python -c "import pymupdf; d=pymupdf.open(); p=d.new_page(); p.insert_text((72,100),'The tumor microenvironment facilitates immune evasion. This is a test sentence about cancer.', fontsize=11); p2=d.new_page(); p2.insert_text((72,100),'Gastric cancer is a common malignancy worldwide with high mortality.', fontsize=11); d.save('sample.pdf')"
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $p = Start-Process -FilePath "dist/双语PDF翻译器.exe" -ArgumentList @("--batch-out","out","--backend","local","--start","1","--end","2","sample.pdf") -Wait -PassThru
+          Write-Host "退出码 $($p.ExitCode)"
+          Get-ChildItem out | Format-Table Name, Length
+          if ($p.ExitCode -ne 0) { throw "自检失败" }
+          if (-not (Get-ChildItem out -Filter *.pdf)) { throw "没有生成任何 PDF" }
+
+      - name: 压缩成 zip（目录版直接压缩，用户解压即用）
+        shell: pwsh
+        run: Compress-Archive -Path dist/BilingualPdfTranslator -DestinationPath dist/BilingualPdfTranslator-windows.zip -CompressionLevel Optimal
+
+      - name: 上传为构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: bilingual-pdf-translator-windows
+          path: dist/BilingualPdfTranslator-windows.zip
+
+      - name: 挂到 Release（仅打 tag 时）
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/双语PDF翻译器.exe
+          body: |
+            ## 双语 PDF 翻译器 ${{ github.ref_name }}
+
+            下载 `双语PDF翻译器.exe` 双击即可，**不需要 Python、不需要配置环境变量、不需要联网**
+            （离线模型已打包在 exe 内，首次运行自动安装）。
+
+            详见 [README](https://github.com/${{ github.repository }}#readme)。

@@ -1,0 +1,150 @@
+# 生物医学专业术语表（双语 PDF 翻译器）
+#
+# 格式：英文 <Tab> 规范中文 <Tab> 备注 <Tab> 已知错误译法（可选，分号分隔）
+#   · 分隔符必须是**真正的制表符**（Tab），不是空格
+#   · # 开头是注释行，不会生效
+#   · 英文匹配不区分大小写，并自动兼容复数（+s / +es）
+#   · 第 4 列留空也可以——程序首次运行会**自动让引擎裸译每条术语**，
+#     把它的错误译法记下来用于校正；这一列是给「已知、想立刻生效」的错译准备的
+#
+# 加词的方法：照着下面的格式加一行，保存，重开程序即可（无需重新打包）。
+#
+# --- 分类学 / 命名法规 -------------------------------------------------------
+type strain	模式菌株	分类学：代表该分类单元的模式菌株	类型菌株
+type strains	模式菌株	复数形式	类型菌株
+type specimen	模式标本	分类学	模式样本;类型标本
+type specimens	模式标本	复数形式	模式样本
+type material	模式材料	分类学	类型材料
+type-derived	模式来源	例：type-derived sequences 模式来源序列	类型衍生;类型派生
+clade	进化支	系统发育树上的分支	花纹;分支群
+clades	进化支	复数形式	花纹
+lineage	谱系	进化学	血统
+phylogeny	系统发育	进化学	系统发生学
+phylogenetic	系统发育的	形容词	系统发生的
+taxon	分类单元	分类学	分类群
+taxonomy	分类学		分类法
+nomenclature	命名法规	例：nomenclatural 命名的	命名法
+nomenclatural	命名的	形容词	名词性的
+holotype	正模	模式类别	全模式
+epitype	附加模式	模式类别	表模式
+basionym	基名	命名法规	基本异名
+synonym	异名	命名法规	同义词
+heterotypic synonym	异模式异名	命名法规	异型异名
+validly published	有效发表	命名法规	有效出版
+effectively published	合格发表	命名法规	有效出版
+embryophytes	有胚植物	植物学	胚胎植物
+angiosperm	被子植物	植物学	被子植物门
+prokaryote	原核生物		原核细胞
+eukaryote	真核生物		真核细胞
+fungus	真菌		霉菌
+fungi	真菌	复数	霉菌
+Helicobacter pylori	幽门螺杆菌	病原学（斜体拉丁名保留拉丁文亦可）	幽门螺旋菌
+Colletotrichum	炭疽菌属	属名，保留拉丁文	炭疽病菌
+
+# --- 组学 / 生物信息学 -------------------------------------------------------
+bioinformatics	生物信息学		生物资讯学
+in silico	计算机模拟	例：in silico analysis 计算机模拟分析	硅酸盐;在硅化物中
+in vitro	体外	实验类型	在玻璃中
+in vivo	体内	实验类型	在活体中
+transcriptome	转录组		转录体
+genome	基因组		基因体
+gene expression	基因表达		基因表现
+differential expression	差异表达	常缩写作 DEG	差异表现
+differentially expressed genes	差异表达基因	DEGs	差异表现基因
+single-cell RNA sequencing	单细胞 RNA 测序	scRNA-seq	单细胞RNA测序技术
+high-throughput sequencing	高通量测序		高通量定序
+gene ontology	基因本体	GO 富集分析	基因本体论
+gene set enrichment analysis	基因集富集分析	GSEA	基因组富集分析
+enrichment analysis	富集分析		浓缩分析
+hub gene	枢纽基因	共表达网络中的核心基因	轮毂基因
+prognostic model	预后模型		预测模型
+prognostic signature	预后特征	基因特征	预后签名
+prognosis	预后		预测
+nomogram	列线图	统计预测图	诺模图;列线图表
+risk score	风险评分		危险评分
+risk stratification	风险分层		危险分层
+immune infiltration	免疫浸润		免疫渗透
+tumor microenvironment	肿瘤微环境	TME	肿瘤微环境（可保留缩写）
+tumour microenvironment	肿瘤微环境	英式拼写	TME
+immune checkpoint	免疫检查点		免疫检验点
+immune evasion	免疫逃逸		免疫逃避
+immunotherapy	免疫治疗		免疫疗法
+biomarker	生物标志物		生物标记
+therapeutic target	治疗靶点		治疗目标
+machine learning	机器学习		机械学习
+weighted gene co-expression network analysis	加权基因共表达网络分析	WGCNA	加权基因共表达网络
+co-expression	共表达		共同表达
+copy number variation	拷贝数变异	CNV	复制数变异
+mutation	突变		变异
+epigenetic	表观遗传	形容词	后生的
+methylation	甲基化		甲基化修饰
+m6A	RNA 甲基化	m6A（N6-甲基腺苷）修饰	M6A
+non-coding RNA	非编码 RNA		非编码核糖核酸
+long non-coding RNA	长链非编码 RNA	lncRNA	长的非编码RNA
+
+# --- 临床 / 疾病 -------------------------------------------------------------
+gastric cancer	胃癌	GC	胃的癌症
+gastric adenocarcinoma	胃腺癌		胃的腺癌
+hepatocellular carcinoma	肝细胞癌	HCC	肝细胞癌变
+prostate cancer	前列腺癌	PCa	前列腺的癌
+colon adenocarcinoma	结肠腺癌	COAD	结肠的腺癌
+colorectal cancer	结直肠癌	CRC	结肠直肠的癌
+breast cancer	乳腺癌		胸部的癌
+psoriasis	银屑病	皮肤病	磷酸盐;多病病人;牛皮癣
+type 2 diabetes mellitus	2 型糖尿病	T2DM	二型糖尿病（可接受）
+heart failure	心力衰竭	HF	心脏衰竭
+COVID-19	新型冠状病毒感染	COVID-19	新冠肺炎（可接受）
+malignancy	恶性肿瘤		恶性
+carcinoma	癌		癌瘤
+metastasis	转移		转移灶
+progression-free survival	无进展生存期	PFS	无进展的存活
+overall survival	总生存期	OS	整体存活
+biopsy	活检		活组织检查
+immunohistochemistry	免疫组织化学	IHC	免疫组织化学染色法
+quantitative real-time PCR	实时定量 PCR	qRT-PCR	定量实时PCR
+
+# --- 统计 / 方法学 -----------------------------------------------------------
+p value	P 值		 P值（大小写可统一）
+hazard ratio	风险比	HR	危险比;人力资源;危险比率
+odds ratio	比值比	OR	优势比
+confidence interval	置信区间	CI	可信区间;置信间隔
+area under the curve	曲线下面积	AUC	曲线下的区域
+receiver operating characteristic	受试者工作特征曲线	ROC	接收者操作特征
+false discovery rate	错误发现率	FDR	错误发现率（可保留）
+fold change	倍数变化	FC	折叠变化
+log2 fold change	以 2 为底的倍数变化	log2FC	对数倍数变化
+univariate Cox regression	单因素 Cox 回归		单变量考克斯回归
+multivariate Cox regression	多因素 Cox 回归		多变量考克斯回归
+Kaplan-Meier	Kaplan-Meier 生存曲线	保留人名	卡普兰-迈耶
+log-rank test	对数秩检验		对数等级检验
+sensitivity analysis	敏感性分析		灵敏度分析
+principal component analysis	主成分分析	PCA	主要成分分析
+correlation analysis	相关性分析		关联性分析
+statistically significant	有统计学意义	例：差异有统计学意义	统计显著
+P < 0.05	P < 0.05	数字必须原样保留	
+gold standard	金标准	例：gold standard 金标准	金本位;黄金标准
+curation	整理	数据整理	策展
+specimen	标本		光谱;样本
+specimens	标本	复数	光谱
+sample	样本		样品
+sequencing	测序		定序
+alignment	比对	序列比对	对齐
+annotate	注释	基因注释	标注
+database	数据库		资料库
+repository	数据库/保藏库	例：culture repository 菌种保藏库	仓库
+culture collection	菌种保藏中心	例：CBS 128530	培养物收集
+
+# --- 数据库 / 软件名（保留原文，防止被译成中文）--------------------------------
+GenBank	GenBank	数据库名，保留原文	基因银行;基因库
+RefSeq	RefSeq	数据库名，保留原文	参考序列
+NCBI	NCBI	机构名，保留原文	
+BLAST	BLAST	程序名，保留原文	爆炸
+TCGA	TCGA	数据库名，保留原文	
+GEO	GEO	数据库名，保留原文	
+STRING	STRING	数据库名，保留原文	字符串
+Cytoscape	Cytoscape	软件名，保留原文	细胞景观
+limma	limma	R 包名，保留原文	利马
+Seurat	Seurat	R 包名，保留原文	
+pROC	pROC	R 包名，保留原文	
+WGCNA	WGCNA	R 包名，保留原文	
+CIBERSORT	CIBERSORT	工具名，保留原文	

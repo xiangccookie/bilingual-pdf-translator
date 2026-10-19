@@ -1,0 +1,27 @@
+# 二进制与构建产物
+build/
+dist/
+*.spec
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 离线模型不进仓库（67.5 MB）：CI 与本地构建脚本会自动下载到 assets/
+assets/*.argosmodel
+
+# 运行期产物
+._cache_*.json
+mt_cache_*.json
+*.log
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 程序运行时解压出来的模型/缓存目录（测试时可能落在仓库里）
+BilingualPdfTranslator/
+assets/glossary/*.cache.json
