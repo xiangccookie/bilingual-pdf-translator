@@ -873,8 +873,13 @@ def run_gui_single():
     log("「使用专业术语表」默认打开：会把生物医学术语校正成规范译法"
         "（type strains→模式菌株、psoriasis→银屑病、in silico→计算机模拟 …）。")
     log("它是机器翻译，只覆盖表里已知的术语——重要内容仍请对照英文原文。")
+    _safe_log("界面：控件已建立，准备进入主循环")
+    if selftest:
+        _safe_log("GUI SELFTEST OK")
+        root.after(900, root.destroy)
     pump()
     root.mainloop()
+    _safe_log("界面：已退出")
 
 
 # ================================================================ 标题提取 / 命名
@@ -1095,12 +1100,37 @@ def run_batch(inputs, out_dir, start=None, end=None, sleep=0.3, log=print,
 
 
 # ================================================================ 图形界面（批量版）
-def run_gui():
+def _fatal(title, detail):
+    """出错了必须让用户看见：写日志 + 弹 Win32 消息框
+
+    不用 tkinter.messagebox：这类崩溃往往就是 tkinter 起不来，
+    再用它报错等于没有提示。Win32 的 MessageBoxW 不依赖任何 GUI 库。
+    """
+    _safe_log("!!! %s\n%s" % (title, detail))
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            "%s\n\n详细信息已写入日志：\n%s\n\n%s" % (
+                title, _log_file_path(), str(detail)[:1200]),
+            "双语 PDF 翻译器", 0x10)
+    except Exception:
+        pass
+
+
+def run_gui(selftest=False):
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
     from tkinter.scrolledtext import ScrolledText
 
-    root = tk.Tk()
+    _safe_log("界面：开始创建窗口 …")
+    try:
+        root = tk.Tk()
+    except Exception:
+        _fatal("界面无法创建（tkinter 初始化失败）", traceback.format_exc())
+        raise
+    _safe_log("界面：Tk() 成功，Tcl/Tk 版本 %s"
+              % str(root.tk.call("info", "patchlevel")))
     root.title("双语 PDF 翻译器 · 批量（自动按论文标题命名）")
     root.geometry("880x640")
     root.minsize(780, 580)
@@ -1401,6 +1431,18 @@ def _ensure_streams():
 
 def main():
     _ensure_streams()
+    _safe_log("启动：python %s，frozen=%s"
+              % (sys.version.split()[0], getattr(sys, "frozen", False)))
+    try:
+        return _main()
+    except SystemExit:
+        raise
+    except Exception:
+        _fatal("程序启动失败", traceback.format_exc())
+        return 3
+
+
+def _main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", nargs=2, metavar=("输入PDF", "输出PDF"),
                     help="命令行自检：不弹窗，跑完整流程（用于验证打包）")
@@ -1415,6 +1457,8 @@ def main():
                     help="文件名来源：zh=标题中译；en=标题英文；orig=原文件名")
     ap.add_argument("--no-glossary", action="store_true",
                     help="不使用专业术语表（默认使用）")
+    ap.add_argument("--gui-selftest", action="store_true",
+                    help="诊断用：建一次窗口、写日志、自动关闭（不弹窗）")
     ap.add_argument("--where", action="store_true",
                     help="诊断用：打印程序路径、模型位置、日志位置后退出")
     ap.add_argument("files", nargs="*", help="批量模式下要翻译的 PDF 列表")
@@ -1457,6 +1501,9 @@ def main():
         run_pipeline(src, out, a.start, a.end, a.sleep, log=_safe_log,
                      backend=a.backend)
         _safe_log("SELFTEST OK")
+        return 0
+    if a.gui_selftest:
+        run_gui(selftest=True)
         return 0
     run_gui()
     return 0
