@@ -1,18 +1,23 @@
 name: ci
 
-# 每次推送 / PR 做最基本的体检：源码能编译、能导入、命令行能跑起来
+# 每次推送 / PR 做最基本的体检：源码能编译、能导入、术语表能载入。
+# 注意：这里**不下载 67.5 MB 模型**，所以很快（1-2 分钟）。
+
 on:
   push:
     branches: [main, master]
   pull_request: {}
+  workflow_dispatch: {}
 
 jobs:
   check:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 取出源码
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: 装 Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -21,20 +26,51 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 语法检查
+      - name: 语法检查（逐个编译）
         shell: pwsh
         run: |
-          python -m py_compile src/bi_app.py src/pdf_bilingual.py src/argos_backend.py src/mt_translate.py
-          Write-Host "语法检查通过"
+          # 注意：这里必须列**实际存在的**文件。
+          # 之前写成 src/argos_backend.py（那个文件已被 local_engine.py 取代并删除），
+          # 导致 py_compile 报 FileNotFoundError，CI 一直是红叉。
+          $files = @(
+            "src/bi_app.py",
+            "src/pdf_bilingual.py",
+            "src/local_engine.py",
+            "src/glossary.py",
+            "src/mt_translate.py",
+            "tools/install_argos.py",
+            "tools/runtime_hook.py"
+          )
+          $bad = 0
+          foreach ($f in $files) {
+            if (-not (Test-Path $f)) { Write-Host "缺少文件: $f" -ForegroundColor Red; $bad++; continue }
+            python -m py_compile $f
+            if ($LASTEXITCODE -ne 0) { Write-Host "语法错误: $f" -ForegroundColor Red; $bad++ }
+            else { Write-Host "OK $f" }
+          }
+          if ($bad -gt 0) { throw "有 $bad 个文件没通过语法检查" }
 
       - name: 导入检查 + 分句器自测
         shell: pwsh
         run: |
-          python -c "import sys; sys.path.insert(0,'src'); import pdf_bilingual as pb; print('split_sentences:', pb.split_sentences('A. B is here. C? D!'))"
+          python -c "import sys; sys.path.insert(0,'src'); import pdf_bilingual as pb; print('split ->', pb.split_sentences('A. B is here. C? D!'))"
 
-      - name: 造测试 PDF 并跑在线引擎的流程（不验证译文质量，只验证排版链路）
+      - name: 术语表能否载入
+        shell: pwsh
+        run: |
+          python -c "import sys,os; sys.path.insert(0,'src'); import glossary as g; p=g.find_glossary_file(); gl=g.Glossary.load(p); print('术语表:', os.path.basename(p) if p else '(未找到)'); print('条目数:', len(gl)); assert len(gl) > 100, '术语表条目过少'; print('术语表检查通过')"
+
+      - name: 必要文件齐全性检查
+        shell: pwsh
+        run: |
+          foreach ($f in @("README.md", "LICENSE", "requirements.txt", "assets/glossary/biology.tsv", "启动.bat")) {
+            if (-not (Test-Path $f)) { throw "缺少必要文件: $f" }
+            Write-Host "存在 $f"
+          }
+
+      - name: 造测试 PDF，验证排版链路（不依赖模型与网络）
         shell: pwsh
         run: |
           python -c "import pymupdf; d=pymupdf.open(); p=d.new_page(); p.insert_text((72,100),'This is a test sentence. It has two sentences.', fontsize=11); d.save('sample.pdf')"
-          python src/bi_app.py --batch-out out --backend mymemory --naming orig sample.pdf
-        continue-on-error: true   # 在线接口可能限流，不因为外部服务把 CI 判红
+          python -c "import sys; sys.path.insert(0,'src'); import bi_app; print('bi_app 导入成功')"
+          Write-Host "排版链路：导入测试通过（真正的合成需要模型，此处不跑）"
