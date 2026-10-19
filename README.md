@@ -97,7 +97,7 @@
 ## 六、开发：从源码运行
 
 ```bash
-git clone https://github.com/<you>/bilingual-pdf-translator.git
+git clone https://github.com/xiangcookkie/bilingual-pdf-translator.git
 cd bilingual-pdf-translator
 pip install -r requirements.txt
 python src/bi_app.py                 # 图形界面
