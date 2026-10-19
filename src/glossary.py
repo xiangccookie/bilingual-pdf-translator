@@ -191,12 +191,18 @@ class GlossaryTranslator:
         base = local_engine.Translator(...)      # 或在线翻译器
         tr   = GlossaryTranslator(base, glossary)
         tr.one("The type strains were sequenced.")   → 用规范术语输出
+
+    另外会记录「没能校正的术语」：英文句子里出现了该术语，但译文里既没有规范译法、
+    也没有已知错误译法——说明引擎这次换了个新说法。这类词会汇总在 `unresolved`，
+    用户看到后可以在术语表第 4 列补一条，下次就能命中。
     """
 
     def __init__(self, inner, glossary, log=None):
         self.inner = inner
         self.glossary = glossary
         self.log = log or (lambda s: None)
+        self.unresolved = {}       # 术语 -> 出现次数（引擎换了说法、表里没记）
+        self._warned = set()
 
     def __getattr__(self, name):          # ok / hit / fail / quota / save 等全部透传
         return getattr(self.inner, name)
@@ -212,6 +218,18 @@ class GlossaryTranslator:
             fixed = self.glossary.apply(text, zh)
         except Exception:
             return zh
+        # 记录「命中了英文术语、但没能校正」的情况，便于用户补词
+        try:
+            for e in self.glossary.terms_in(text):
+                canon = e["zh"]
+                if canon not in fixed:
+                    self.unresolved[e["en"]] = self.unresolved.get(e["en"], 0) + 1
+                    if e["en"] not in self._warned and len(self._warned) < 30:
+                        self._warned.add(e["en"])
+                        self.log("  术语未校正：%s（译文里没找到规范译法「%s」，"
+                                 "可在术语表第 4 列补一条它的机器译法）" % (e["en"], canon))
+        except Exception:
+            pass
         if fixed != zh:
             # 校正后仍要保证数字没被动过
             try:
@@ -220,6 +238,15 @@ class GlossaryTranslator:
             except Exception:
                 pass
         return fixed
+
+    def summary(self):
+        """给界面/日志用的一句话总结"""
+        if not self.unresolved:
+            return "术语表：全部命中，无需人工补词。"
+        top = sorted(self.unresolved.items(), key=lambda x: -x[1])[:8]
+        return ("术语表：有 %d 个术语引擎换了说法、没能自动校正：%s"
+                "（要修的话，在术语表第 4 列补上它的机器译法）"
+                % (len(self.unresolved), "、".join(k for k, _ in top)))
 
 
 NUM_RE_FALLBACK = re.compile(r"\d+(?:[.,]\d+)?")
@@ -243,15 +270,55 @@ def load_default(log=None, cache_dir="", allow_download=False):
     return g
 
 
-def find_glossary_file(explicit="", roots=None):
-    """找术语表文件：显式指定 > 程序资源目录/assets/glossary > 源码目录同级"""
-    if explicit and os.path.exists(explicit):
-        return explicit
-    roots = roots or []
+def _app_data_dir():
+    """用户数据目录（和模型、缓存放在一起）"""
+    try:
+        import local_engine as le
+        return le.app_data_dir()
+    except Exception:
+        import tempfile
+        d = os.path.join(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(),
+                         "BilingualPdfTranslator")
+        os.makedirs(d, exist_ok=True)
+        return d
+
+
+def user_glossary_path():
+    """**用户自己那份**术语表：<数据目录>/glossary/biology.tsv
+
+    为什么要一份用户副本：
+      · 安装目录里的是「出厂版本」，升级会被覆盖，而且可能没有写权限；
+      · 用户加的术语必须放在**自己的**文件里，升级不丢。
+    程序优先读这份；不存在时从出场版本复制一份出来。
+    """
+    return os.path.join(_app_data_dir(), "glossary", DEFAULT_NAME)
+
+
+def ensure_user_glossary():
+    """确保用户副本存在（不存在就从出场版本复制）。返回用户副本路径。"""
+    dst = user_glossary_path()
+    if os.path.exists(dst):
+        return dst
+    src = _bundled_glossary_file()
+    try:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if src:
+            import shutil
+            shutil.copyfile(src, dst)
+        else:
+            with open(dst, "w", encoding="utf-8", newline="\n") as f:
+                f.write("# 英文<Tab>规范中文<Tab>备注<Tab>已知错误译法（分号分隔）\n")
+    except Exception:
+        return dst if os.path.exists(dst) else ""
+    return dst
+
+
+def _bundled_glossary_file():
+    """出场时的术语表（打包后在程序内部，跑源码时在 assets/ 下）"""
     import sys
-    roots.insert(0, getattr(sys, "_MEIPASS", ""))
-    roots.append(os.path.dirname(os.path.abspath(__file__)))
-    roots.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    roots = [getattr(sys, "_MEIPASS", ""),
+             os.path.dirname(os.path.abspath(__file__)),
+             os.path.dirname(os.path.dirname(os.path.abspath(__file__)))]
     for r in roots:
         if not r:
             continue
@@ -259,6 +326,20 @@ def find_glossary_file(explicit="", roots=None):
         if os.path.exists(p):
             return p
     return ""
+
+
+def find_glossary_file(explicit="", roots=None):
+    """找术语表文件，优先级：
+        ① 显式指定
+        ② **用户自己的副本**（可编辑、升级不丢）
+        ③ 出场版本（安装目录内）
+    """
+    if explicit and os.path.exists(explicit):
+        return explicit
+    u = user_glossary_path()
+    if os.path.exists(u):
+        return u
+    return _bundled_glossary_file()
 
 
 if __name__ == "__main__":

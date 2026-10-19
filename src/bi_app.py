@@ -348,6 +348,7 @@ def tidy(zh):
     z = re.sub(r"\s+[）)]", "）", z)
     z = re.sub(r"\|\s*([A-Za-z0-9_.\-]+)\s*\|", r"|\1|", z)
     z = re.sub(r"([\u4e00-\u9fff])\s+([\u4e00-\u9fff])", r"\1\2", z)
+    z = z.replace("\u2047", "").replace("\u25c1", "")   # 去掉模型偶发的怪字符 ⁇ / ◁
     z = re.sub(r"\s+([，。；：、）])", r"\1", z)
     return z.strip()
 
@@ -1213,22 +1214,54 @@ def run_gui():
     b_model = ttk.Button(eng, text="安装离线模型", command=install_model, width=13)
     b_model.pack(side="left", padx=(0, 10))
     def open_glossary():
-        """打开术语表所在文件夹，方便自己加词"""
+        """点一下就用记事本打开**你自己的**术语表文件，改完保存即可
+
+        为什么打开「用户副本」而不是安装目录里的原件：
+          · 安装目录在升级时会被覆盖，写进去的术语会丢；
+          · 安装目录可能根本没写权限。
+        所以首次点开时会自动把出场词汇表复制一份到用户数据目录，之后都改这份。
+        """
+        if _gloss is None:
+            log("术语表模块没能载入（安装可能不完整）。")
+            return
         try:
-            import glossary as _g
-            p = _g.find_glossary_file()
+            _gloss.ensure_user_glossary()
+            p = _gloss.user_glossary_path()
+        except Exception as e:
+            log("准备术语表失败：%s" % e)
+            return
+        if not (p and os.path.exists(p)):
+            log("没有找到术语表文件，也没能创建：%s" % p)
+            return
+        log("术语表文件：%s" % p)
+        log("格式：英文<Tab>规范中文<Tab>备注<Tab>已知错译（分号分隔），一行一条；"
+            "# 开头是注释。改完保存，点「重载术语表」即可生效。")
+        try:
+            # 用记事本打开：Tab 分隔的文件用 Excel 容易被自动改写，记事本最稳
+            import subprocess
+            subprocess.Popen(["notepad.exe", p])
         except Exception:
-            p = ""
-        if p and os.path.exists(p):
-            log("术语表文件：%s" % p)
-            log("用记事本打开它，按「英文<Tab>中文<Tab>备注<Tab>已知错译」一行一条加词，保存后重开程序即可。")
-            os.startfile(os.path.dirname(p))
-        else:
-            log("没有找到术语表文件（assets/glossary/biology.tsv）。")
+            os.startfile(p)
+
+    def reload_glossary():
+        """改完文件后不用重启：重新读一遍术语表并重新标定"""
+        global _GLOSSARY, _GLOSSARY_TRIED
+        _GLOSSARY = None
+        _GLOSSARY_TRIED = False
+        if _gloss is None:
+            log("术语表模块未载入。")
+            return
+        g = get_glossary(log=log, force=True)
+        if g is None:
+            log("没有载入到术语表（文件可能不存在）。")
+            return
+        log("术语表已重新载入：%d 条（%s）" % (len(g), os.path.basename(_gloss.find_glossary_file())))
+        log("下次点「开始翻译」即按新术语表校正。")
 
     v_gloss = tk.BooleanVar(value=True)
     ttk.Checkbutton(eng, text="使用专业术语表", variable=v_gloss).pack(side="left", padx=(0, 2))
-    ttk.Button(eng, text="打开术语表", command=open_glossary, width=11).pack(side="left", padx=(0, 8))
+    ttk.Button(eng, text="专业词汇表…", command=open_glossary, width=13).pack(side="left", padx=(0, 4))
+    ttk.Button(eng, text="重载术语表", command=reload_glossary, width=11).pack(side="left", padx=(0, 8))
     ttk.Label(eng, text="   起始页").pack(side="left")
     v_s = tk.StringVar()
     ttk.Entry(eng, textvariable=v_s, width=5).pack(side="left", padx=2)

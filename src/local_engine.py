@@ -188,6 +188,7 @@ def tidy(zh):
     z = re.sub(r"\s+[）)]", "）", z)
     z = re.sub(r"\|\s*([A-Za-z0-9_.\-]+)\s*\|", r"|\1|", z)
     z = re.sub(r"([\u4e00-\u9fff])\s+([\u4e00-\u9fff])", r"\1\2", z)
+    z = z.replace("\u2047", "").replace("\u25c1", "")   # 去掉模型偶发的怪字符 ⁇ / ◁
     z = re.sub(r"\s+([，。；：、）])", r"\1", z)
     return z.strip()
 

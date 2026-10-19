@@ -10,14 +10,14 @@
 # 加词的方法：照着下面的格式加一行，保存，重开程序即可（无需重新打包）。
 #
 # --- 分类学 / 命名法规 -------------------------------------------------------
-type strain	模式菌株	分类学：代表该分类单元的模式菌株	类型菌株
-type strains	模式菌株	复数形式	类型菌株
+type strain	模式菌株	分类学：代表该分类单元的模式菌株	类型菌株;种类菌株;菌株类型
+type strains	模式菌株	复数形式	类型菌株;种类菌株;种类的菌株
 type specimen	模式标本	分类学	模式样本;类型标本
 type specimens	模式标本	复数形式	模式样本
 type material	模式材料	分类学	类型材料
 type-derived	模式来源	例：type-derived sequences 模式来源序列	类型衍生;类型派生
-clade	进化支	系统发育树上的分支	花纹;分支群
-clades	进化支	复数形式	花纹
+clade	进化支	系统发育树上的分支	花纹;分支群;盖子
+clades	进化支	复数形式	花纹;分支群
 lineage	谱系	进化学	血统
 phylogeny	系统发育	进化学	系统发生学
 phylogenetic	系统发育的	形容词	系统发生的
@@ -43,7 +43,7 @@ Colletotrichum	炭疽菌属	属名，保留拉丁文	炭疽病菌
 
 # --- 组学 / 生物信息学 -------------------------------------------------------
 bioinformatics	生物信息学		生物资讯学
-in silico	计算机模拟	例：in silico analysis 计算机模拟分析	硅酸盐;在硅化物中
+in silico	计算机模拟	例：in silico analysis 计算机模拟分析	硅酸盐;在硅化物中;硅胶里
 in vitro	体外	实验类型	在玻璃中
 in vivo	体内	实验类型	在活体中
 transcriptome	转录组		转录体
@@ -90,7 +90,7 @@ prostate cancer	前列腺癌	PCa	前列腺的癌
 colon adenocarcinoma	结肠腺癌	COAD	结肠的腺癌
 colorectal cancer	结直肠癌	CRC	结肠直肠的癌
 breast cancer	乳腺癌		胸部的癌
-psoriasis	银屑病	皮肤病	磷酸盐;多病病人;牛皮癣
+psoriasis	银屑病	皮肤病	磷酸盐;多病病人;牛皮癣;病患者;花生酱
 type 2 diabetes mellitus	2 型糖尿病	T2DM	二型糖尿病（可接受）
 heart failure	心力衰竭	HF	心脏衰竭
 COVID-19	新型冠状病毒感染	COVID-19	新冠肺炎（可接受）
@@ -105,7 +105,7 @@ quantitative real-time PCR	实时定量 PCR	qRT-PCR	定量实时PCR
 
 # --- 统计 / 方法学 -----------------------------------------------------------
 p value	P 值		 P值（大小写可统一）
-hazard ratio	风险比	HR	危险比;人力资源;危险比率
+hazard ratio	风险比	HR	危险比;人力资源;危险比率;危险率
 odds ratio	比值比	OR	优势比
 confidence interval	置信区间	CI	可信区间;置信间隔
 area under the curve	曲线下面积	AUC	曲线下的区域
@@ -123,9 +123,9 @@ correlation analysis	相关性分析		关联性分析
 statistically significant	有统计学意义	例：差异有统计学意义	统计显著
 P < 0.05	P < 0.05	数字必须原样保留	
 gold standard	金标准	例：gold standard 金标准	金本位;黄金标准
-curation	整理	数据整理	策展
-specimen	标本		光谱;样本
-specimens	标本	复数	光谱
+curation	整理	数据整理	策展;管理
+specimen	标本		光谱;样本;样品
+specimens	标本	复数	光谱;样本;样品
 sample	样本		样品
 sequencing	测序		定序
 alignment	比对	序列比对	对齐
