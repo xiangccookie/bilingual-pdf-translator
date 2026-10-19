@@ -25,3 +25,8 @@ Thumbs.db
 # 程序运行时解压出来的模型/缓存目录（测试时可能落在仓库里）
 BilingualPdfTranslator/
 assets/glossary/*.cache.json
+
+# 打包自检时生成的临时文件（别混进仓库）
+sample.pdf
+out/
+BilingualPdfTranslator.spec
