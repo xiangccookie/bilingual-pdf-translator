@@ -1,7 +1,7 @@
 name: ci
 
-# 每次推送 / PR 做最基本的体检：源码能编译、能导入、术语表能载入。
-# 注意：这里**不下载 67.5 MB 模型**，所以很快（1-2 分钟）。
+# 推送 / PR 时做轻量体检：源码能编译、能导入、术语表能载入。
+# 这里**不下载 67.5 MB 模型**，所以跑得很快（1-2 分钟）。
 
 on:
   push:
@@ -12,26 +12,32 @@ on:
 jobs:
   check:
     runs-on: windows-latest
+    env:
+      # GitHub 的 Windows runner 控制台默认不是 UTF-8；
+      # 一旦程序 print 中文就会抛 UnicodeEncodeError（实测导致过 CI 失败）。
+      # 下面三行把 Python 的 stdio 强制成 UTF-8，并且本文件里的输出尽量只用 ASCII。
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: "1"
     steps:
-      - name: 取出源码
+      - name: checkout
         uses: actions/checkout@v4
 
-      - name: 装 Python
+      - name: setup python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: 装依赖
+      - name: install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 语法检查（逐个编译）
+      - name: syntax check (compile every source file)
         shell: pwsh
         run: |
-          # 注意：这里必须列**实际存在的**文件。
-          # 之前写成 src/argos_backend.py（那个文件已被 local_engine.py 取代并删除），
-          # 导致 py_compile 报 FileNotFoundError，CI 一直是红叉。
+          # 必须列**实际存在**的文件。
+          # 之前写了 src/argos_backend.py（已被 local_engine.py 取代并删除），
+          # py_compile 报 FileNotFoundError，CI 一直红着。
           $files = @(
             "src/bi_app.py",
             "src/pdf_bilingual.py",
@@ -43,34 +49,35 @@ jobs:
           )
           $bad = 0
           foreach ($f in $files) {
-            if (-not (Test-Path $f)) { Write-Host "缺少文件: $f" -ForegroundColor Red; $bad++; continue }
+            if (-not (Test-Path $f)) { Write-Host "missing: $f" -ForegroundColor Red; $bad++; continue }
             python -m py_compile $f
-            if ($LASTEXITCODE -ne 0) { Write-Host "语法错误: $f" -ForegroundColor Red; $bad++ }
+            if ($LASTEXITCODE -ne 0) { Write-Host "syntax error: $f" -ForegroundColor Red; $bad++ }
             else { Write-Host "OK $f" }
           }
-          if ($bad -gt 0) { throw "有 $bad 个文件没通过语法检查" }
+          if ($bad -gt 0) { throw "$bad file(s) failed syntax check" }
 
-      - name: 导入检查 + 分句器自测
+      - name: import check + sentence splitter
         shell: pwsh
         run: |
-          python -c "import sys; sys.path.insert(0,'src'); import pdf_bilingual as pb; print('split ->', pb.split_sentences('A. B is here. C? D!'))"
+          python -c "import sys; sys.path.insert(0,'src'); import pdf_bilingual as pb; s=pb.split_sentences('A. B is here. C? D!'); print('split count =', len(s)); assert len(s) >= 2"
 
-      - name: 术语表能否载入
+      - name: glossary loads and corrects
         shell: pwsh
         run: |
-          python -c "import sys,os; sys.path.insert(0,'src'); import glossary as g; p=g.find_glossary_file(); gl=g.Glossary.load(p); print('术语表:', os.path.basename(p) if p else '(未找到)'); print('条目数:', len(gl)); assert len(gl) > 100, '术语表条目过少'; print('术语表检查通过')"
+          # 输出保持纯 ASCII，避免 runner 控制台编码问题
+          python -c "import sys; sys.path.insert(0,'src'); import glossary as g; p=g.find_glossary_file(); assert p, 'glossary file not found'; gl=g.Glossary.load(p); print('glossary entries =', len(gl)); assert len(gl) > 100; out=gl.apply('The type strains were used.','xingzhuangjunzhu used'); print('apply ok:', out); print('glossary check passed')"
 
-      - name: 必要文件齐全性检查
+      - name: required files present
         shell: pwsh
         run: |
-          foreach ($f in @("README.md", "LICENSE", "requirements.txt", "assets/glossary/biology.tsv", "启动.bat")) {
-            if (-not (Test-Path $f)) { throw "缺少必要文件: $f" }
-            Write-Host "存在 $f"
+          foreach ($f in @("README.md","LICENSE","requirements.txt","assets/glossary/biology.tsv","src/local_engine.py","src/glossary.py")) {
+            if (-not (Test-Path $f)) { throw "missing file: $f" }
+            Write-Host "found: $f"
           }
 
-      - name: 造测试 PDF，验证排版链路（不依赖模型与网络）
+      - name: bi_app imports (layout pipeline smoke)
         shell: pwsh
         run: |
           python -c "import pymupdf; d=pymupdf.open(); p=d.new_page(); p.insert_text((72,100),'This is a test sentence. It has two sentences.', fontsize=11); d.save('sample.pdf')"
-          python -c "import sys; sys.path.insert(0,'src'); import bi_app; print('bi_app 导入成功')"
-          Write-Host "排版链路：导入测试通过（真正的合成需要模型，此处不跑）"
+          python -c "import sys; sys.path.insert(0,'src'); import bi_app; print('bi_app import OK')"
+          Write-Host "layout pipeline import OK (a real build needs the 67.5 MB model, skipped here)"
