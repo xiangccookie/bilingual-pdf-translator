@@ -88,7 +88,8 @@ jobs:
             # 关键：把 LOCALAPPDATA 指到一个空目录，逼程序走「首次运行」那条路径。
             # 不这么做的话，runner 上若已存在模型，会直接复用，等于什么都没测。
             $env:LOCALAPPDATA = $data
-            $p = Start-Process -FilePath $t.Exe -ArgumentList @('--batch-out', $out, '--backend', 'local', 'sample.pdf') -Wait -PassThru
+            $exeAbs = Join-Path $PWD $t.Exe
+            $p = Start-Process -FilePath $exeAbs -ArgumentList @('--batch-out', $out, '--backend', 'local', (Join-Path $PWD 'sample.pdf')) -Wait -PassThru
             Write-Host "$($t.Name) exit=$($p.ExitCode)"
             if ($p.ExitCode -ne 0) { throw "$($t.Name): exit code not 0" }
             if (-not (Get-ChildItem $out -Filter *.pdf)) { throw "$($t.Name): no PDF produced" }
