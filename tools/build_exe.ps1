@@ -40,28 +40,10 @@ Remove-Item -Force *.spec -ErrorAction SilentlyContinue
 
 # ---- 3) 打包（参数放在数组里，避免多行续行符出错）
 Write-Host "[3/4] 开始打包（约 1-2 分钟）…"
-$pyiArgs = @(
-    "--onedir", "--console",
-    "--name", "BilingualPdfTranslator",
-    "--paths", "src",
-    "--add-data", "assets/translate-en_zh.argosmodel;assets",
-    "--add-data", "assets/glossary;assets/glossary",
-    "--runtime-hook", "tools/runtime_hook.py",
-    "--collect-submodules", "reportlab",
-    "--collect-data", "reportlab",
-    "--collect-submodules", "ctranslate2",
-    "--collect-submodules", "sentencepiece",
-    "--exclude-module", "argostranslate",
-    "--exclude-module", "torch",
-    "--exclude-module", "spacy",
-    "--exclude-module", "stanza",
-    "--exclude-module", "minisbd",
-    "--exclude-module", "thinc",
-    "--exclude-module", "onnxruntime",
-    "--exclude-module", "weasel",
-    "--exclude-module", "typer",
-    "src/bi_app.py"
-)
+# 打包参数统一来自 tools/pyi_common.ps1，**不要在这里再复制一份**。
+# 复制过的后果：本地脚本补了术语表、CI 那份没跟上 → 发布包静默少了术语表功能。
+. (Join-Path $PSScriptRoot "pyi_common.ps1")
+$pyiArgs = @("--onedir", "--name", "BilingualPdfTranslator") + $PyiCommonArgs + @("src/bi_app.py")
 & pyinstaller @pyiArgs
 
 $appDir = Join-Path $root "dist\BilingualPdfTranslator"

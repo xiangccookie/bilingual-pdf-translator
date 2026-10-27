@@ -42,31 +42,16 @@ jobs:
       - name: 打包（目录版 + 单文件版，两者都必须含模型与术语表）
         shell: pwsh
         run: |
-          # 公共参数，两条 --add-data 都不能少：
-          #   模型   assets/translate-en_zh.argosmodel → 首次运行自动解压到用户目录，目标机器无需联网
-          #   术语表 assets/glossary                   → 缺了它程序**不会报错**，只会静默跳过术语校正
-          #          （历史事故：只打了模型没打术语表，发布出去的包「术语表功能凭空消失」）
-          # --exclude-module 排掉 torch/spacy/stanza/minisbd：本项目自己分句用不到，能省约 164 MB
-          $common = @(
-            '--console',
-            '--paths', 'src',
-            '--add-data', 'assets/translate-en_zh.argosmodel;assets',
-            '--add-data', 'assets/glossary;assets/glossary',
-            '--collect-submodules', 'reportlab', '--collect-data', 'reportlab',
-            '--collect-submodules', 'ctranslate2', '--collect-submodules', 'sentencepiece',
-            '--runtime-hook', 'tools/runtime_hook.py',
-            '--exclude-module', 'argostranslate', '--exclude-module', 'torch',
-            '--exclude-module', 'spacy', '--exclude-module', 'stanza',
-            '--exclude-module', 'minisbd', '--exclude-module', 'thinc',
-            '--exclude-module', 'onnxruntime', '--exclude-module', 'weasel',
-            '--exclude-module', 'typer'
-          )
+          # 打包参数是**唯一一份**，来自 tools/pyi_common.ps1（本地脚本也读它）。
+          # 历史事故就出在「复制一份」：本地补了 --add-data assets/glossary，CI 那份没跟上，
+          # 发布包就静默少了术语表功能。这里只 dot-source，不要再把参数抄进来。
+          . (Join-Path $PWD "tools/pyi_common.ps1")
           # 目录版：启动快，推荐普通用户
-          & pyinstaller --onedir @common --name 'BilingualPdfTranslator' `
+          & pyinstaller --onedir @PyiCommonArgs --name 'BilingualPdfTranslator' `
               --distpath dist --workpath build src/bi_app.py
           if ($LASTEXITCODE -ne 0) { throw "onedir build failed" }
           # 单文件版：只有一个 exe，便于转发；首次启动要解压，慢一些
-          & pyinstaller --onefile @common --name 'BilingualPdfTranslator-onefile' `
+          & pyinstaller --onefile @PyiCommonArgs --name 'BilingualPdfTranslator-onefile' `
               --distpath dist-one --workpath build-one src/bi_app.py
           if ($LASTEXITCODE -ne 0) { throw "onefile build failed" }
 

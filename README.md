@@ -19,7 +19,7 @@
 | 下载哪个 | 怎么用 | 适合谁 |
 | --- | --- | --- |
 | `BilingualPdfTranslator-windows.zip` | 解压后双击里面的 `BilingualPdfTranslator.exe` | **推荐**。启动快（约 1 秒）。解压出来的 `_internal` 文件夹不能删。 |
-| `BilingualPdfTranslator-onefile.exe` | 直接双击 | 想要「就一个文件」便于转发时用。首次启动要把约 200 MB 解到临时目录，会慢十几秒。 |
+| `BilingualPdfTranslator-onefile.exe` | 直接双击 | 想要「就一个文件」便于转发时用。首次启动要把约 140 MB 解到临时目录，会慢十几秒。 |
 
 - 不需要安装 Python、不需要 pip、不需要联网
 - 首次启动约 10 秒（把离线模型解压到用户目录，只做一次）
@@ -32,7 +32,7 @@
 
 ## 一、给使用者：下载 → 解压 → 双击
 
-1. 到本仓库 **Releases** 页下载 `BilingualPdfTranslator-windows.zip`（约 197 MB）。
+1. 到本仓库 **Releases** 页下载 `BilingualPdfTranslator-windows.zip`（约 140 MB）。
 2. 解压到任意目录（**不要**只把 exe 单独拖出来，它旁边还有 `_internal` 文件夹）。
 3. 双击 `BilingualPdfTranslator.exe`。
 
@@ -50,13 +50,13 @@
 解压后**双击里面的 启动.bat** 即可：
 
 1. 它会自动检查本机有没有程序包
-2. 没有就从本仓库的 Releases 下载（约 197 MB，**只需一次**）
+2. 没有就从本仓库的 Releases 下载（约 140 MB，**只需一次**）
 3. 解压到 %LOCALAPPDATA%\\BilingualPdfTranslator\\app 并启动
 
 也就是说：**Code 下载 + 双击 启动.bat = 也能直接用**（首次需要联网下载，之后不再联网）。
 
 > 为什么程序本体不直接放进仓库：GitHub 仓库**单文件上限 100 MB**，
-> 而程序包含 Python 运行时与 67.5 MB 离线模型，共 197.4 MB。
+> 而程序包含 Python 运行时与 67.5 MB 离线模型，共约 142 MB。
 > 所以它只能放在 Release 附件里，启动.bat 就是替你去把它取回来。
 
 ## 二、它能做什么
@@ -197,7 +197,7 @@ BilingualPdfTranslator.exe --where
 | 现象 | 原因 / 处理 |
 |---|---|
 | `--windowed` 打包后一启动就退出，连日志都没有 | 无控制台时 `sys.stdout` 是 `None`，第三方库在 import 阶段写它就崩。**改用 `--console` + 运行时钩子隐藏窗口**，并给 stdout 兜底 |
-| 单文件版报 `Could not create temporary directory!` | 单文件每次运行要把 ~200 MB 解包到临时目录。**改用目录版**，不依赖临时目录 |
+| 单文件版报 `Could not create temporary directory!` | 单文件每次运行都要把约 140 MB 解包到**临时目录**。临时目录不可写时直接失败——实测把它放在某些受限目录下必现。**日常用目录版**（不依赖临时目录）；单文件版只当转发用，碰到这个报错就换目录版 |
 | 中文目录下报 `NOT_FOUND: …sentencepiece.model`（文件明明在） | sentencepiece 的 C++ 实现用窄字符 API，打不开非 ASCII 路径。**先 chdir 进模型目录再用相对名加载** |
 | 装了 argostranslate 却一翻译就崩，报 huggingface 超时 | 它默认用 stanza 分句，首次运行要联网下模型。**本项目自己分句**，并直接用 CTranslate2 + sentencepiece，不依赖 argostranslate |
 | 打包体积超过 1 GB | torch/spacy/stanza 只被上面的分句器用到。全部 `--exclude-module` 掉，省约 164 MB |

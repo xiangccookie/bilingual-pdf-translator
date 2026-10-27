@@ -70,7 +70,9 @@ jobs:
       - name: required files present
         shell: pwsh
         run: |
-          foreach ($f in @("README.md","LICENSE","requirements.txt","assets/glossary/biology.tsv","src/local_engine.py","src/glossary.py")) {
+          # tools/pyi_common.ps1 是打包参数的唯一来源，本地脚本与 CI 都依赖它，
+          # 被误删会让两边打包都不完整，所以在这里也守一道。
+          foreach ($f in @("README.md","LICENSE","requirements.txt","assets/glossary/biology.tsv","src/local_engine.py","src/glossary.py","tools/pyi_common.ps1","tools/build_exe.ps1","tools/runtime_hook.py")) {
             if (-not (Test-Path $f)) { throw "missing file: $f" }
             Write-Host "found: $f"
           }
