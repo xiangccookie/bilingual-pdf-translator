@@ -14,10 +14,15 @@
 
 # ⬇️ https://github.com/xiangccookie/bilingual-pdf-translator/releases/latest
 
-点开上面的链接 → 在 **Assets** 里下载 BilingualPdfTranslator-windows.zip → 解压 → 双击 BilingualPdfTranslator.exe。
+点开上面的链接 → 在 **Assets** 里挑一个下载。两种形态功能完全一样，**都自带离线模型和术语表**：
+
+| 下载哪个 | 怎么用 | 适合谁 |
+| --- | --- | --- |
+| `BilingualPdfTranslator-windows.zip` | 解压后双击里面的 `BilingualPdfTranslator.exe` | **推荐**。启动快（约 1 秒）。解压出来的 `_internal` 文件夹不能删。 |
+| `BilingualPdfTranslator-onefile.exe` | 直接双击 | 想要「就一个文件」便于转发时用。首次启动要把约 200 MB 解到临时目录，会慢十几秒。 |
 
 - 不需要安装 Python、不需要 pip、不需要联网
-- 首次启动约 10 秒（把离线模型解压到用户目录）
+- 首次启动约 10 秒（把离线模型解压到用户目录，只做一次）
 - Windows 提示「未知发布者」时：更多信息 → 仍要运行
 
 > 如果你是用绿色 **Code → Download ZIP** 下的源码包（里面没有程序本体）：

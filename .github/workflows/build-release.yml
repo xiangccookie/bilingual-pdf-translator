@@ -1,6 +1,6 @@
 name: build-release
 
-# 打 tag（v1.0.0 这种）时自动打包 Windows exe 并挂到 Release
+# 打 tag（v1.0.0 这种）时自动打包 Windows 成品并挂到 Release
 on:
   push:
     tags:
@@ -33,62 +33,111 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path assets | Out-Null
           $url = "https://argos-net.com/v1/translate-en_zh-1_9.argosmodel"
-          Write-Host "下载 $url"
+          Write-Host "download $url"
           Invoke-WebRequest -Uri $url -OutFile "assets/translate-en_zh.argosmodel" -TimeoutSec 600
           $len = (Get-Item "assets/translate-en_zh.argosmodel").Length
-          Write-Host "模型大小 $len 字节"
-          if ($len -lt 50MB) { throw "模型文件异常（太小的文件说明下载失败）" }
+          Write-Host "model bytes $len"
+          if ($len -lt 50MB) { throw "model download failed (file too small)" }
 
-      - name: 打包成单文件 exe
+      - name: 打包（目录版 + 单文件版，两者都必须含模型与术语表）
         shell: pwsh
         run: |
-          # 说明：
-          #  --add-data 把模型塞进 exe；首次运行会自动装到用户目录，所以目标机器无需联网
-          #  --exclude-module 排掉 torch/spacy/stanza/minisbd：本项目自己分句，用不到它们，
-          #                    排掉能省约 164 MB（否则 exe 会超过 1 GB）
-          pyinstaller --onedir --console `
-            --name "双语PDF翻译器" `
-            --paths src `
-            --add-data "assets/translate-en_zh.argosmodel;assets" `
-            --collect-submodules reportlab --collect-data reportlab `
-            --runtime-hook tools/runtime_hook.py `
-            --collect-submodules ctranslate2 --collect-submodules sentencepiece `
-            --exclude-module argostranslate --exclude-module torch --exclude-module spacy --exclude-module stanza `
-            --exclude-module minisbd --exclude-module thinc --exclude-module onnxruntime `
-            --exclude-module weasel --exclude-module typer `
-            src/bi_app.py
+          # 公共参数，两条 --add-data 都不能少：
+          #   模型   assets/translate-en_zh.argosmodel → 首次运行自动解压到用户目录，目标机器无需联网
+          #   术语表 assets/glossary                   → 缺了它程序**不会报错**，只会静默跳过术语校正
+          #          （历史事故：只打了模型没打术语表，发布出去的包「术语表功能凭空消失」）
+          # --exclude-module 排掉 torch/spacy/stanza/minisbd：本项目自己分句用不到，能省约 164 MB
+          $common = @(
+            '--console',
+            '--paths', 'src',
+            '--add-data', 'assets/translate-en_zh.argosmodel;assets',
+            '--add-data', 'assets/glossary;assets/glossary',
+            '--collect-submodules', 'reportlab', '--collect-data', 'reportlab',
+            '--collect-submodules', 'ctranslate2', '--collect-submodules', 'sentencepiece',
+            '--runtime-hook', 'tools/runtime_hook.py',
+            '--exclude-module', 'argostranslate', '--exclude-module', 'torch',
+            '--exclude-module', 'spacy', '--exclude-module', 'stanza',
+            '--exclude-module', 'minisbd', '--exclude-module', 'thinc',
+            '--exclude-module', 'onnxruntime', '--exclude-module', 'weasel',
+            '--exclude-module', 'typer'
+          )
+          # 目录版：启动快，推荐普通用户
+          & pyinstaller --onedir @common --name 'BilingualPdfTranslator' `
+              --distpath dist --workpath build src/bi_app.py
+          if ($LASTEXITCODE -ne 0) { throw "onedir build failed" }
+          # 单文件版：只有一个 exe，便于转发；首次启动要解压，慢一些
+          & pyinstaller --onefile @common --name 'BilingualPdfTranslator-onefile' `
+              --distpath dist-one --workpath build-one src/bi_app.py
+          if ($LASTEXITCODE -ne 0) { throw "onefile build failed" }
 
-      - name: 冒烟测试（命令行自检，验证打包完整）
+      - name: 冒烟测试（真跑一遍，并验证模型与术语表确实进了包）
         shell: pwsh
         run: |
-          # 造一个 2 页的测试 PDF，然后让它按「本地离线」跑一遍，只验流程能不能跑通
-          python -c "import pymupdf; d=pymupdf.open(); p=d.new_page(); p.insert_text((72,100),'The tumor microenvironment facilitates immune evasion. This is a test sentence about cancer.', fontsize=11); p2=d.new_page(); p2.insert_text((72,100),'Gastric cancer is a common malignancy worldwide with high mortality.', fontsize=11); d.save('sample.pdf')"
-          New-Item -ItemType Directory -Force -Path out | Out-Null
-          $p = Start-Process -FilePath "dist/双语PDF翻译器.exe" -ArgumentList @("--batch-out","out","--backend","local","--start","1","--end","2","sample.pdf") -Wait -PassThru
-          Write-Host "退出码 $($p.ExitCode)"
-          Get-ChildItem out | Format-Table Name, Length
-          if ($p.ExitCode -ne 0) { throw "自检失败" }
-          if (-not (Get-ChildItem out -Filter *.pdf)) { throw "没有生成任何 PDF" }
+          # 造一个 1 页测试 PDF
+          python -c "import pymupdf; d=pymupdf.open(); p=d.new_page(); p.insert_text((72,100),'The tumor microenvironment facilitates immune evasion in gastric cancer.', fontsize=11); d.save('sample.pdf')"
 
-      - name: 压缩成 zip（目录版直接压缩，用户解压即用）
+          $targets = @(
+            @{ Name = 'onedir';  Exe = 'dist\BilingualPdfTranslator\BilingualPdfTranslator.exe' },
+            @{ Name = 'onefile'; Exe = 'dist-one\BilingualPdfTranslator-onefile.exe' }
+          )
+          foreach ($t in $targets) {
+            $data = Join-Path $PWD ("ci-data-" + $t.Name)
+            $out  = Join-Path $PWD ("ci-out-"  + $t.Name)
+            New-Item -ItemType Directory -Force -Path $data, $out | Out-Null
+
+            # 关键：把 LOCALAPPDATA 指到一个空目录，逼程序走「首次运行」那条路径。
+            # 不这么做的话，runner 上若已存在模型，会直接复用，等于什么都没测。
+            $env:LOCALAPPDATA = $data
+            $p = Start-Process -FilePath $t.Exe -ArgumentList @('--batch-out', $out, '--backend', 'local', 'sample.pdf') -Wait -PassThru
+            Write-Host "$($t.Name) exit=$($p.ExitCode)"
+            if ($p.ExitCode -ne 0) { throw "$($t.Name): exit code not 0" }
+            if (-not (Get-ChildItem $out -Filter *.pdf)) { throw "$($t.Name): no PDF produced" }
+
+            # 证据一：随包的离线模型确实被解压出来了
+            $bin = Join-Path $data 'BilingualPdfTranslator\model\translate-en_zh-1_9\model\model.bin'
+            if (-not (Test-Path $bin)) { throw "$($t.Name): bundled model missing (model.bin not extracted)" }
+            $mb = [math]::Round((Get-Item $bin).Length / 1MB, 1)
+            Write-Host "$($t.Name) model.bin = $mb MB"
+
+            # 证据二：术语表确实被载入（日志里会出现 biology.tsv）
+            # 术语表缺失时程序不报错，只会写一行「没有找到术语表」——所以必须显式断言
+            $log = Join-Path $data 'BilingualPdfTranslator\app.log'
+            if (-not (Test-Path $log)) { throw "$($t.Name): app.log missing" }
+            $txt = Get-Content $log -Raw -Encoding UTF8
+            if ($txt -notmatch 'biology\.tsv') { throw "$($t.Name): glossary not loaded (assets/glossary not bundled)" }
+            Write-Host "$($t.Name) glossary loaded OK"
+          }
+
+      - name: 压缩目录版（解压即用）
         shell: pwsh
-        run: Compress-Archive -Path dist/BilingualPdfTranslator -DestinationPath dist/BilingualPdfTranslator-windows.zip -CompressionLevel Optimal
+        run: |
+          Compress-Archive -Path dist/BilingualPdfTranslator -DestinationPath dist/BilingualPdfTranslator-windows.zip -CompressionLevel Optimal
+          Get-ChildItem dist/BilingualPdfTranslator-windows.zip | Format-Table Name, Length
 
       - name: 上传为构建产物
         uses: actions/upload-artifact@v4
         with:
           name: bilingual-pdf-translator-windows
-          path: dist/BilingualPdfTranslator-windows.zip
+          path: |
+            dist/BilingualPdfTranslator-windows.zip
+            dist-one/*.exe
 
       - name: 挂到 Release（仅打 tag 时）
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/双语PDF翻译器.exe
+          files: |
+            dist/BilingualPdfTranslator-windows.zip
+            dist-one/*.exe
           body: |
             ## 双语 PDF 翻译器 ${{ github.ref_name }}
 
-            下载 `双语PDF翻译器.exe` 双击即可，**不需要 Python、不需要配置环境变量、不需要联网**
-            （离线模型已打包在 exe 内，首次运行自动安装）。
+            两种形态，按喜好挑一个，**都不需要 Python、不需要配置环境变量、不需要联网**
+            （离线模型与术语表都已在包内，首次运行自动安装到用户目录）。
+
+            | 文件 | 用法 | 说明 |
+            | --- | --- | --- |
+            | `BilingualPdfTranslator-windows.zip` | 解压后双击里面的 exe | **推荐**。启动快（约 1 秒）。exe 旁边的 `_internal` 文件夹不能删。 |
+            | `BilingualPdfTranslator-onefile.exe` | 双击即可 | 只有一个文件，便于转发。首次启动要把约 200 MB 解压到临时目录，会慢十几秒。 |
 
             详见 [README](https://github.com/${{ github.repository }}#readme)。
