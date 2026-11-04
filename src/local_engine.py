@@ -183,7 +183,8 @@ def ensure_model(log=None, allow_download=True):
 def tidy(zh):
     """收拾机器翻译的排版小毛病（只动空格与标点，不动字）"""
     z = str(zh).replace("\u2581", "")   # 去掉句子片段符 ▁（模型输出残留）
-    z = zh
+    # ⚠️ 这里原来还有一行 `z = zh`，把上一行的清洗**整个覆盖掉** ——
+    #    等于 ▁ 从来没被删过（实测成品里漏出 88 处）。已删除，别再写回去。
     z = re.sub(r"[（(]\s+", "（", z)
     z = re.sub(r"\s+[）)]", "）", z)
     z = re.sub(r"\|\s*([A-Za-z0-9_.\-]+)\s*\|", r"|\1|", z)

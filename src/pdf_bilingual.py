@@ -663,6 +663,22 @@ _ABBR = (r"(?:e\.g|i\.e|et\s+al|al|fig|figs|eq|ref|refs|no|vs|etc|approx|ca|tab"
          r"|suppl|resp|cf|dr|prof|st|jr|sr|inc|ltd|co|vol|pp)")
 
 
+def clean_sp_mark(s):
+    """去掉 sentencepiece 的词边界符 ▁。（渲染时兜底，覆盖老缓存）
+
+    这个符号本该在 tidy() 里就删掉，但历史上有两处 tidy() 都写错成
+    「删完又赋值回原串」，导致旧版本生成的缓存文件里存的就是带 ▁ 的译文。
+    缓存是按句子命中复用的，所以只在翻译时清洗不够 —— 渲染前再兜一层，
+    老缓存也能出干净文本。
+    """
+    if not s or "\u2581" not in s:
+        return s
+    # 后面紧跟汉字的，直接去掉（中文不需要空格）
+    s = re.sub(r"\u2581(?=[\u4e00-\u9fff，。；：、（）【】「」0-9])", "", s)
+    s = s.replace("\u2581", " ")          # 后面是拉丁字母的，当成空格
+    return re.sub(r"[ \t]{2,}", " ", s)
+
+
 def _zh_same_as_en(a, b):
     """译文与英文几乎相同？—— 人名、拉丁学名、编号这类"原文照抄"的片段
 
@@ -738,9 +754,25 @@ def split_sentences(text):
     return out
 
 
+# 「纯阅读版」的起点：论文标题之后、Abstract 之前的作者/单位/期刊信息全部丢弃。
+# 之所以单独放一个正则：不同期刊写成 "Abstract" / "ABSTRACT" / "Summary"，
+# 而且块首可能带编号（"1 Abstract"），所以要允许前导空白与编号。
+ABSTRACT_RE = re.compile(r"^\s*(?:\d+\s*[.、]?\s*)?(abstract|summary)\b", re.I)
+
+
 def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
-              title_zh="", title_en="", source_line="", cover_note="", mid_x=MID_X):
-    """把译文合成为中英对照 PDF"""
+              title_zh="", title_en="", source_line="", cover_note="", mid_x=MID_X,
+              plain=False):
+    """把译文合成为中英对照 PDF
+
+    plain=True → 纯阅读版（用户 2026-11-05 定），与默认版的差别只有排版层：
+      · 不保留原排版：无封面、无「原文第 N 页」分隔、无彩色分隔线
+      · 全篇黑字（默认版正文是灰、标题是深蓝）
+      · 从 Abstract 起印，之前的作者/单位/期刊信息全删；只保留英文原题一行
+      · 标题只分一级/二级；其余文字一律正文样式（三级小标题仍单独成段）
+      · 图注表注整段删除，但图/表图片照旧插在原来的位置
+      · 正文一句英文紧跟一句中文；参考文献保留英文原文（不做对照）
+    """
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_LEFT, TA_CENTER
     from reportlab.lib.pagesizes import A4
@@ -826,6 +858,28 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
                               textColor=colors.HexColor("#40484F")),
     }
 
+    # ---- 纯阅读版：整套样式改成黑字、去掉彩色 -------------------------
+    # 只覆盖 plain 模式用得上的几个键；默认版的 S 一个字都不动，
+    # 这样「加开关」才真的是两个独立形态，互不影响。
+    if plain:
+        BLACK = colors.HexColor("#000000")
+        S["h1"] = ParagraphStyle("plain_h1", fontName="CJKB", fontSize=15, leading=21,
+                                 spaceBefore=12, spaceAfter=6, textColor=BLACK)
+        S["h2"] = ParagraphStyle("plain_h2", fontName="CJKB", fontSize=12.5, leading=18,
+                                 spaceBefore=10, spaceAfter=4, textColor=BLACK)
+        # 正文字号从 8.2 提到 9.6：纯阅读版是拿来通读的，默认版偏紧凑
+        S["inline_body"] = ParagraphStyle("plain_body", fontName="CJK", fontSize=9.6,
+                                          leading=15.5, alignment=TA_LEFT, spaceAfter=7,
+                                          wordWrap="CJK", textColor=BLACK)
+        S["ref"] = ParagraphStyle("plain_ref", fontName="Helvetica", fontSize=8.4,
+                                  leading=11.5, alignment=TA_LEFT, spaceAfter=3,
+                                  textColor=BLACK)
+        S["title_en"] = ParagraphStyle("plain_title", fontName="Times-Bold", fontSize=15,
+                                       leading=21, alignment=TA_LEFT, spaceAfter=14,
+                                       textColor=BLACK)
+        S["note"] = ParagraphStyle("plain_note", fontName="CJK", fontSize=8.4,
+                                   leading=12, wordWrap="CJK", textColor=BLACK)
+
     FRAME_H = H - TM - BM
 
     def img_flow(path, reserve=34):
@@ -846,11 +900,16 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
 
     def footer(canv, d):
         canv.saveState()
-        canv.setStrokeColor(GREY); canv.setLineWidth(0.5)
-        canv.line(LM, BM - 12, W - RM, BM - 12)
-        canv.setFont("CJK", 7.6); canv.setFillColor(colors.HexColor("#7A858E"))
-        canv.drawString(LM, BM - 22, source_line or "中英对照版")
-        canv.drawRightString(W - RM, BM - 22, "第 %d 页" % d.page)
+        if plain:
+            # 纯阅读版只要页码，不要分隔线和「双语对照（机器翻译）」那行页脚
+            canv.setFont("CJK", 8); canv.setFillColor(colors.HexColor("#000000"))
+            canv.drawCentredString(W / 2, BM - 22, "%d" % d.page)
+        else:
+            canv.setStrokeColor(GREY); canv.setLineWidth(0.5)
+            canv.line(LM, BM - 12, W - RM, BM - 12)
+            canv.setFont("CJK", 7.6); canv.setFillColor(colors.HexColor("#7A858E"))
+            canv.drawString(LM, BM - 22, source_line or "中英对照版")
+            canv.drawRightString(W - RM, BM - 22, "第 %d 页" % d.page)
         canv.restoreState()
 
     doc.addPageTemplates([PageTemplate(id="main",
@@ -858,26 +917,35 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
                                        onPage=footer)])
 
     story = [Spacer(1, 26)]
-    if title_zh:
-        story.append(Paragraph(_rich(title_zh, species), S["title_zh"]))
-    if title_en:
-        story.append(Paragraph(_rich(title_en, species), S["title_en"]))
-    story.append(HRFlowable(width="100%", thickness=0.8, color=BLUE, spaceAfter=12))
+    if plain:
+        # 纯阅读版：只留英文原题一行。作者、单位、期刊名、DOI、收稿日期一律不印。
+        if title_en:
+            story.append(Paragraph(_rich(title_en, species), S["title_en"]))
+        story.append(Spacer(1, 6))
+    else:
+        if title_zh:
+            story.append(Paragraph(_rich(title_zh, species), S["title_zh"]))
+        if title_en:
+            story.append(Paragraph(_rich(title_en, species), S["title_en"]))
+        story.append(HRFlowable(width="100%", thickness=0.8, color=BLUE, spaceAfter=12))
 
     def _zh_text(v):
         """译文可能是字符串（整段）或列表（逐句），统一取成字符串"""
         return "".join(str(x) for x in v) if isinstance(v, list) else str(v or "")
 
-    for b in model:
-        if b["page"] == 1 and b["kind"] in ("authors", "affiliation"):
-            z = _zh_text(ZH.get(b["id"], ""))
-            if z:
-                story.append(Paragraph(_rich(z, species), S["meta"]))
-    if cover_note:
-        story.append(Spacer(1, 12))
-        story.append(HRFlowable(width="100%", thickness=0.4, color=GREY, spaceAfter=6))
-        story.append(Paragraph(cover_note, S["note"]))
-    story.append(PageBreak())
+    if not plain:
+        # 封面页（作者行 + 「本文件由…生成」的说明）只属于默认版；
+        # 纯阅读版不翻封面，标题之后直接接 Abstract。
+        for b in model:
+            if b["page"] == 1 and b["kind"] in ("authors", "affiliation"):
+                z = _zh_text(ZH.get(b["id"], ""))
+                if z:
+                    story.append(Paragraph(_rich(z, species), S["meta"]))
+        if cover_note:
+            story.append(Spacer(1, 12))
+            story.append(HRFlowable(width="100%", thickness=0.4, color=GREY, spaceAfter=6))
+            story.append(Paragraph(cover_note, S["note"]))
+        story.append(PageBreak())
 
     bypage = collections.defaultdict(list)
     for r in model:
@@ -917,7 +985,12 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
         否则一行里中文 10.8pt、英文 8.2pt，看着像排版坏了。
         正文块：英文走 Helvetica（拉丁字形完整）、中文走 CJK（有汉字字形），
         但两者字号与颜色完全一样，看上去是一整段。
+
+        纯阅读版：标题只分两级（hlevel 由 bi_app.prepare_blocks 按字号聚成两档），
+        没有 hlevel 的老数据一律按二级处理，避免因为缺字段而报错。
         """
+        if plain and b["kind"] == "head":
+            return ("h1" if b.get("hlevel") == 1 else "h2"), None
         if b["kind"] == "head":
             return "inline_head", None
         if b["kind"] == "figcap":
@@ -967,7 +1040,7 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
                     # 逐句去重：这一句的中文与英文实质相同（人名/拉丁名/编号）
                     # 就不要再印一遍，否则会变成 "Susanne S.，Susanne S. Renner1…"
                     if cz and not _zh_same_as_en(e, cz):
-                        parts.append(sep_for(e) + _rich(cz, species))
+                        parts.append(sep_for(e) + _rich(clean_sp_mark(cz), species))
                     parts.append(" ")          # 句间空格：免得中文句号直接贴下一句英文
                 return Paragraph("".join(parts).rstrip(), S[style])
             if len(ens) != len(zs):
@@ -976,11 +1049,15 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
             z = "".join(zs)
         z = (z or "").strip()
         en = b["text"].rstrip()
-        return Paragraph(wrap_en(en) + (sep_for(en) + _rich(z, species) if z else ""),
+        return Paragraph(wrap_en(en) + (sep_for(en) + _rich(clean_sp_mark(z), species) if z else ""),
                          S[style])
 
-    def emit(b):
-        """输出一个块（英文原文与中文译文同排一段）"""
+    def emit(b, text=True):
+        """输出一个块（英文原文与中文译文同排一段）
+
+        text=False 时**只插图不印字**：纯阅读版要保留图和表，但图注表注那一段不要。
+        图是靠「走到图注块时插入」定位的，所以必须仍然走这个块，只是不排文字。
+        """
         t = b["text"]
         for k, meta in figpath.items():          # 图注之前插入原图
             # 精确匹配优先：块 ID == 该图的 caption_id。
@@ -1000,15 +1077,66 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
                     print("  插图失败:", meta["image"], e)
                 story.append(Spacer(1, 4))
                 break
+        if not text:
+            return
         style, en_font = style_for(b)
         story.append(bilingual_para(b, style, en_font))
 
     def is_panel_label(t):
         return t.strip() in ("A", "B", "A B", "A  B", "C", "D")
 
+    # 纯阅读版要「从摘要起印」。找起点用两级判定：
+    #   ① 有 Abstract/Summary 标题 → 用它（最可靠）
+    #   ② 没有这个标题的论文（实测 Nature Microbiology 那篇正文里根本没有
+    #      "Abstract" 这个词，摘要就是紧跟作者行的一段长正文）→
+    #      取「第一个像摘要的段子」：≥500 字符、能切成 ≥3 句、平均句长 ≥40 字符。
+    #      为什么不直接取「第一个长块」：作者行也可能很长（实测 470 字符），
+    #      但它切不成 3 句，用句数+平均句长正好把名单排掉。
+    # 找不到就返回 None，调用方退化成「不裁剪」——绝不能因为找不到就印成空白。
+    def _find_plain_start():
+        if not plain:
+            return None
+        flat = []
+        for _p in main_pages:
+            flat.extend(reading_order(bypage[_p]))
+        # ① 先找显式的摘要标题
+        for b in flat:
+            if b["action"] != "skip" and ABSTRACT_RE.match(b["text"].strip()):
+                return b.get("id")
+        # ② 再找「像摘要的那一段」
+        for b in flat:
+            # 只考虑**正常输出**的正文块：被丢弃的（页眉页脚）和图表标题都不算
+            if b["action"] == "skip" or b["kind"] == "figcap":
+                continue
+            if b.get("page", 1) > 2:          # 摘要不会跑到第 3 页去
+                continue
+            t = b["text"].strip()
+            if len(t) < 500:
+                continue
+            sents = split_sentences(t)
+            if len(sents) >= 3 and (sum(len(x) for x in sents) / len(sents)) >= 40:
+                return b.get("id")
+        return None
+
+    drop_ids = set()
+    if plain:
+        _start = _find_plain_start()
+        if _start:
+            _flat = []
+            for _p in main_pages:
+                _flat.extend(reading_order(bypage[_p]))
+            for _b in _flat:
+                if _b.get("id") == _start:
+                    break
+                if _b["action"] != "skip":
+                    drop_ids.add(_b.get("id"))
+        print("  纯阅读版：摘要起点 = %s，丢弃其前 %d 块 %s"
+              % (_start or "(未找到，不裁剪)", len(drop_ids), sorted(drop_ids)))
+
     for pno in main_pages:
-        story.append(Paragraph("原文第 %d 页" % pno, S["h1"]))
-        story.append(HRFlowable(width="100%", thickness=0.5, color=BLUE, spaceAfter=7))
+        if not plain:
+            story.append(Paragraph("原文第 %d 页" % pno, S["h1"]))
+            story.append(HRFlowable(width="100%", thickness=0.5, color=BLUE, spaceAfter=7))
         for b in reading_order(bypage[pno]):
             # ⚠️ action == "skip" 必须在这里跳过。classify() 的语义是
             #    「skip（丢弃）」—— 页眉、页脚、期刊前置信息、版权声明都靠它丢掉。
@@ -1020,12 +1148,24 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
             # 第 1 页的题目/作者/单位/数据声明已在封面呈现，正文不重复
             if pno == 1 and b["kind"] in ("title", "authors", "affiliation", "footnote"):
                 continue
+            if plain:
+                if b.get("id") in drop_ids:
+                    # 摘要之前的部分（作者、单位、期刊、DOI…）整块丢弃
+                    continue
+                if b["kind"] == "figcap":
+                    # 图注/表注整段不要，但图/表本身仍要插在这里
+                    emit(b, text=False)
+                    continue
             emit(b)
-        story.append(PageBreak())
+        if not plain:
+            story.append(PageBreak())
 
     if ref_pages:
-        story.append(Paragraph("参考文献（Literature Cited · 保留英文原文）", S["h1"]))
-        story.append(HRFlowable(width="100%", thickness=0.5, color=BLUE, spaceAfter=7))
+        # 纯阅读版不加「参考文献（…保留英文原文）」这行标题：
+        # "References" 这一块本身就会以一级/二级标题印出来，再加一行就重复了。
+        if not plain:
+            story.append(Paragraph("参考文献（Literature Cited · 保留英文原文）", S["h1"]))
+            story.append(HRFlowable(width="100%", thickness=0.5, color=BLUE, spaceAfter=7))
         for pno in ref_pages:
             for b in reading_order(bypage[pno]):
                 if b["action"] == "translate":
@@ -1043,7 +1183,8 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
     # 正文只保留英文原图（图注照常翻译，走上面的 bilingual_para）。
     # figannot / labelboxes 两个附加子命令仍在，但它们不参与 build。
 
-    if glossary and glossary.get("themes"):
+    # 术语解释附录属「附加物」，纯阅读版不要它（要的是干净正文）。
+    if glossary and glossary.get("themes") and not plain:
         n = sum(len(t["terms"]) for t in glossary["themes"])
         story.append(PageBreak())
         story.append(Paragraph("术语解释 · 按主题分类", S["h1"]))

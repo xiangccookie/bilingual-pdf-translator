@@ -343,7 +343,8 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 
 def tidy(zh):
     z = str(zh).replace("\u2581", "")   # 去掉句子片段符 ▁（模型输出残留）
-    z = zh
+    # ⚠️ 这里原来还有一行 `z = zh`，把上一行的清洗**整个覆盖掉** ——
+    #    等于 ▁ 从来没被删过（实测成品里漏出 88 处）。已删除，别再写回去。
     z = re.sub(r"[（(]\s+", "（", z)
     z = re.sub(r"\s+[）)]", "）", z)
     z = re.sub(r"\|\s*([A-Za-z0-9_.\-]+)\s*\|", r"|\1|", z)
@@ -544,6 +545,25 @@ def prepare_blocks(pdf_path, workdir, log):
         elif sz >= body_size * 1.08:
             r["kind"] = "head"
 
+    # 标题分两级（只有「纯阅读版」用得到）。
+    # 为什么不写死「≥1.2 倍正文」：不同期刊一级/二级标题的字号差得很不一样
+    # （有的差 3pt、有的只差 0.5pt），写死阈值会在某篇论文上把两级压成一级，
+    # 或把正文误升成标题。按**本文自己的**标题字号分布分档更稳：
+    # 比最大标题字号小 0.6pt 以内的算一级，其余算二级。
+    _sizes = {}
+    for r in recs:
+        s = block_font(r)
+        if s:
+            _sizes[r["id"]] = s
+    _head_top = [v for r in recs if r["kind"] == "head"
+                 for v in [_sizes.get(r["id"])] if v]
+    if _head_top:
+        _top = max(_head_top)
+        for r in recs:
+            if r["kind"] == "head":
+                v = _sizes.get(r["id"])
+                r["hlevel"] = 1 if (v is not None and v >= _top - 0.6) else 2
+
     pb.mark_references(recs, verbose=False)
     for r in recs:
         if re.match(r"^\d{1,3}\.\s+\S", r["text"].strip()):
@@ -630,10 +650,32 @@ def prepare_blocks(pdf_path, workdir, log):
     return recs, figs
 
 
+def _clean_plain_title(t):
+    """把「栏目标签 + DOI + 标题」那种混排行清成纯标题（纯阅读版专用）。
+
+    实测（Nature Microbiology 2023 · 木质素解构）原文那一行是：
+      "Article https://doi.org/10.1038/s41564-023-01336-8 Lignin deconstruction by anaerobic fungi"
+    不清洗直接印，成品第一行就是这串垃圾；清洗后 → "Lignin deconstruction by anaerobic fungi"
+    """
+    t = (t or "").strip()
+    t = re.sub(r"https?://\S+", " ", t)                 # 网址
+    t = re.sub(r"\bdoi:\s*\S+", " ", t, flags=re.I)     # doi: 10.xxx
+    t = re.sub(r"\b10\.\d{4,9}/\S+", " ", t)            # 裸 DOI（10.1038/xxx）
+    t = re.sub(r"^(article|article in press|review|research|research article|"
+               r"open access|letter|brief communication|original article)\b",
+               " ", t, flags=re.I)                      # 栏目标签
+    t = re.sub(r"\s+", " ", t).strip(" -—|·,;")
+    return t
+
+
 def run_pipeline(src_pdf, out_pdf, start=None, end=None, sleep=0.3, log=print,
                  progress=None, stop=None, backend="mymemory",
-                 translator=None, title_zh="", quiet_engine=False):
-    """完整流程：trim → 提取清理裁图 → 逐句翻译 → 合成 PDF"""
+                 translator=None, title_zh="", quiet_engine=False, plain=False):
+    """完整流程：trim → 提取清理裁图 → 逐句翻译 → 合成 PDF
+
+    plain=True → 出「纯阅读版」：不保留原排版、全篇黑字、从 Abstract 起印、
+    只区分一级/二级标题、图注表注不印（图表图片仍在）、参考文献保留英文。
+    """
     tmp = tempfile.mkdtemp(prefix="bi_pdf_")
     try:
         log("① 复制并截取页面 …")
@@ -699,11 +741,29 @@ def run_pipeline(src_pdf, out_pdf, start=None, end=None, sleep=0.3, log=print,
                  "图仅保留英文原图；表格与图内文字以图片保留；参考文献保留英文。")
         json.dump(recs, open(os.path.join(tmp, "doc_model.json"), "w",
                              encoding="utf-8", newline="\n"), ensure_ascii=False, indent=1)
+        # 纯阅读版要印**英文原题**：优先 extract_title()（它按字号找首页最大块，
+        # 带「别把期刊名当标题」的护栏），取不到再退回模型里 kind == "title" 的块。
+        # 拿到后必须清洗——Nature 系常把栏目标签、DOI 和标题印在同一行。
+        title_en_plain = ""
+        if plain:
+            raw = ""
+            try:
+                raw = extract_title(src_pdf) or ""
+            except Exception:
+                raw = ""
+            if not raw:
+                cands = [r for r in recs if r.get("kind") == "title" and r.get("page") == 1]
+                if cands:
+                    raw = max(cands, key=lambda r: len(r["text"]))["text"].strip()
+            title_en_plain = _clean_plain_title(raw)
         # ⚠️ 必须把封面文字**作为参数**传给 cmd_build；只写 cfg.json 是不生效的
         #    （那是命令行入口才读的）。踩过：封面标题空白、说明文字丢失。
         pb.cmd_build(tmp, out_pdf, figures={"figures": figs},
-                     title_zh=out_name, title_en="",
-                     source_line="双语对照（机器翻译）", cover_note=COVER)
+                     title_zh=out_name, title_en=title_en_plain,
+                     source_line="双语对照（机器翻译）", cover_note=COVER,
+                     plain=plain)
+        if plain:
+            log("  形态：纯阅读版（无排版 / 全篇黑字 / Abstract 起印 / 图表保留但图注不印）")
         log("✅ 完成：%s（%s）" % (out_pdf,
                                  "{:,} 字节".format(os.path.getsize(out_pdf))))
         return out_pdf
@@ -778,6 +838,16 @@ def run_gui_single():
         ttk.Label(eng, text="（本地模型未装，选这项会提示安装方法）",
                   foreground="#a04000").pack(side="left", padx=6)
 
+    # 「纯阅读版」开关：不勾 = 现在这种（保留原排版、彩色标题、图注照译）；
+    # 勾上 = 无排版、全篇黑字、从 Abstract 起印、只有一级/二级标题、图注表注不印。
+    lay = ttk.Frame(root)
+    lay.pack(fill="x", **pad)
+    v_plain = tk.BooleanVar(value=False)
+    ttk.Checkbutton(lay, text="纯阅读版（无排版 · 全黑字 · Abstract 起印 · 不印图注表注）",
+                    variable=v_plain).pack(side="left")
+    ttk.Label(lay, text="图表图片仍保留，参考文献保留英文",
+              foreground="#555555").pack(side="left", padx=8)
+
     btns = ttk.Frame(root)
     btns.pack(fill="x", **pad)
     b_start = ttk.Button(btns, text="开始翻译")
@@ -830,7 +900,8 @@ def run_gui_single():
         try:
             run_pipeline(src, out, s, e, sl, log=log,
                          progress=lambda d, t: q.put(("prog", (d, t))),
-                         stop=lambda: state["stop"], backend=backend)
+                         stop=lambda: state["stop"], backend=backend,
+                         plain=bool(v_plain.get()))
             q.put(("done", out))
         except Exception:
             q.put(("error", traceback.format_exc(limit=3)))
@@ -1027,7 +1098,7 @@ def wrap_with_glossary(tr, log=None, enabled=True):
 # ================================================================ 批量流程
 def run_batch(inputs, out_dir, start=None, end=None, sleep=0.3, log=print,
               progress=None, progress_file=None, stop=None, backend="local",
-              naming="zh", use_glossary=True):
+              naming="zh", use_glossary=True, plain=False):
     """一次处理多篇：逐篇「取名 → 翻译 → 生成」，一篇失败不影响其余
 
     naming 决定输出文件叫什么：
@@ -1079,7 +1150,7 @@ def run_batch(inputs, out_dir, start=None, end=None, sleep=0.3, log=print,
             # ② 翻译 + 合成
             run_pipeline(src, dst, start, end, sleep, log=log, progress=progress,
                          stop=stop, backend=backend, translator=tr,
-                         title_zh=stem, quiet_engine=True)
+                         title_zh=stem, quiet_engine=True, plain=plain)
             results.append((src, dst, True, ""))
             log("  ✅ 输出：%s" % dst)
         except Exception as e:
@@ -1290,6 +1361,9 @@ def run_gui(selftest=False):
 
     v_gloss = tk.BooleanVar(value=True)
     ttk.Checkbutton(eng, text="使用专业术语表", variable=v_gloss).pack(side="left", padx=(0, 2))
+    # 纯阅读版开关（与术语表并列）。默认不勾，保持现在的「保留原排版」输出。
+    v_plain = tk.BooleanVar(value=False)
+    ttk.Checkbutton(eng, text="纯阅读版", variable=v_plain).pack(side="left", padx=(0, 2))
     ttk.Button(eng, text="专业词汇表…", command=open_glossary, width=13).pack(side="left", padx=(0, 4))
     ttk.Button(eng, text="重载术语表", command=reload_glossary, width=11).pack(side="left", padx=(0, 8))
     ttk.Label(eng, text="   起始页").pack(side="left")
@@ -1364,7 +1438,8 @@ def run_gui(selftest=False):
             res = run_batch(todo, outdir, s, e, 0.3, log=log,
                             progress=lambda d, t: q.put(("prog", (d, t))),
                             progress_file=lambda i, n, name: q.put(("file", (i, n, name))),
-                            stop=lambda: state["stop"], backend=backend, naming=naming, use_glossary=use_gloss)
+                            stop=lambda: state["stop"], backend=backend, naming=naming,
+                            use_glossary=use_gloss, plain=bool(v_plain.get()))
             q.put(("done", res))
         except Exception:
             q.put(("error", traceback.format_exc(limit=3)))
@@ -1401,6 +1476,12 @@ def run_gui(selftest=False):
     log("用法：① 添加文章（可多选、也可整个文件夹）→ ② 选输出文件夹 → ③ 开始翻译。")
     log("文件名会自动用「论文标题的中文译名」；同名不会覆盖，会加（2）（3）。")
     log("本地离线引擎 0.15 秒/句，不联网、无限额；在线引擎每天有免费额度。")
+    if selftest:
+        # ⚠️ 这段以前漏了：批量界面的 --gui-selftest 收了 selftest 参数却从不使用，
+        #    结果建完窗口就停在 mainloop 里一直不退出（实测挂死 75 秒以上）。
+        #    现在与 run_gui_single 的处理一致：写一行标记，900 毫秒后自动关闭。
+        _safe_log("GUI SELFTEST OK")
+        root.after(900, root.destroy)
     pump()
     root.mainloop()
 
@@ -1457,6 +1538,9 @@ def _main():
                     help="文件名来源：zh=标题中译；en=标题英文；orig=原文件名")
     ap.add_argument("--no-glossary", action="store_true",
                     help="不使用专业术语表（默认使用）")
+    ap.add_argument("--plain", action="store_true",
+                    help="纯阅读版：不保留原排版、全黑字、从 Abstract 起印、"
+                         "只分一级/二级标题、不印图注表注（图表图片仍保留）")
     ap.add_argument("--gui-selftest", action="store_true",
                     help="诊断用：建一次窗口、写日志、自动关闭（不弹窗）")
     ap.add_argument("--where", action="store_true",
@@ -1492,14 +1576,14 @@ def _main():
             return 2
         res = run_batch(a.files, a.batch_out, a.start, a.end, a.sleep,
                         log=_safe_log, backend=a.backend, naming=a.naming,
-                        use_glossary=not a.no_glossary)
+                        use_glossary=not a.no_glossary, plain=a.plain)
         ok = sum(1 for r in res if r[2])
         _safe_log("BATCH OK %d/%d" % (ok, len(res)))
         return 0 if ok == len(res) else 1
     if a.selftest:
         src, out = a.selftest
         run_pipeline(src, out, a.start, a.end, a.sleep, log=_safe_log,
-                     backend=a.backend)
+                     backend=a.backend, plain=a.plain)
         _safe_log("SELFTEST OK")
         return 0
     if a.gui_selftest:
