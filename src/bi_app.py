@@ -756,10 +756,19 @@ def run_pipeline(src_pdf, out_pdf, start=None, end=None, sleep=0.3, log=print,
                 if cands:
                     raw = max(cands, key=lambda r: len(r["text"]))["text"].strip()
             title_en_plain = _clean_plain_title(raw)
+        # 纯阅读版把标题也译成中文，紧跟在英文原题下面一行。
+        # 有失败兜底：译不出来就只印英文，绝不留一行空白标题。
+        title_zh_plain = ""
+        if plain and title_en_plain:
+            try:
+                title_zh_plain = tidy(tr.one(title_en_plain))
+            except Exception:
+                title_zh_plain = ""
         # ⚠️ 必须把封面文字**作为参数**传给 cmd_build；只写 cfg.json 是不生效的
         #    （那是命令行入口才读的）。踩过：封面标题空白、说明文字丢失。
         pb.cmd_build(tmp, out_pdf, figures={"figures": figs},
-                     title_zh=out_name, title_en=title_en_plain,
+                     title_zh=(title_zh_plain if plain else out_name),
+                     title_en=title_en_plain,
                      source_line="双语对照（机器翻译）", cover_note=COVER,
                      plain=plain)
         if plain:

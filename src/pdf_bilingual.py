@@ -874,8 +874,12 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
         S["ref"] = ParagraphStyle("plain_ref", fontName="Helvetica", fontSize=8.4,
                                   leading=11.5, alignment=TA_LEFT, spaceAfter=3,
                                   textColor=BLACK)
-        S["title_en"] = ParagraphStyle("plain_title", fontName="Times-Bold", fontSize=15,
-                                       leading=21, alignment=TA_LEFT, spaceAfter=14,
+        S["title_en"] = ParagraphStyle("plain_title", fontName="Times-Bold", fontSize=17.5,
+                                       leading=24, alignment=TA_LEFT, spaceAfter=4,
+                                       textColor=BLACK)
+        # 标题的中文译文（紧跟在英文原题下面一行）
+        S["title_zh"] = ParagraphStyle("plain_title_zh", fontName="CJKB", fontSize=12.5,
+                                       leading=18, alignment=TA_LEFT, spaceAfter=16,
                                        textColor=BLACK)
         S["note"] = ParagraphStyle("plain_note", fontName="CJK", fontSize=8.4,
                                    leading=12, wordWrap="CJK", textColor=BLACK)
@@ -918,9 +922,11 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
 
     story = [Spacer(1, 26)]
     if plain:
-        # 纯阅读版：只留英文原题一行。作者、单位、期刊名、DOI、收稿日期一律不印。
+        # 纯阅读版：英文原题 + 它的中文译文；作者、单位、期刊名、DOI、收稿日期一律不印。
         if title_en:
             story.append(Paragraph(_rich(title_en, species), S["title_en"]))
+        if title_zh:
+            story.append(Paragraph(_rich(title_zh, species), S["title_zh"]))
         story.append(Spacer(1, 6))
     else:
         if title_zh:
@@ -990,7 +996,16 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
         没有 hlevel 的老数据一律按二级处理，避免因为缺字段而报错。
         """
         if plain and b["kind"] == "head":
-            return ("h1" if b.get("hlevel") == 1 else "h2"), None
+            # ⚠️ 关键护栏：`head` 是"按字号比正文大"判出来的，**不等于**真标题。
+            #    实测 Nature Microbiology 那篇：摘要整段就是用大字号排的，
+            #    于是 1494 字的摘要被归成 head，纯阅读版把它排成了一级标题
+            #    （15pt 粗体），比标题还抢眼、整页看着都是大字。
+            #    真标题有共同特征：短、无句末标点。这里用这两条把它和"大字号正文"分开。
+            t = b["text"].strip()
+            looks_like_heading = (len(t) <= 90 and not re.search(r"[.。!?！？;；]\s", t))
+            if looks_like_heading:
+                return ("h1" if b.get("hlevel") == 1 else "h2"), None
+            return "inline_body", "Helvetica"
         if b["kind"] == "head":
             return "inline_head", None
         if b["kind"] == "figcap":
