@@ -229,6 +229,7 @@ BilingualPdfTranslator.exe --where
 
 | 现象 | 原因 / 处理 |
 |---|---|
+| 译文/原文里冒出 `g-el-p-er-me-ation`、`Ne'oc'al'li'…` 这类碎片 | **不是模型拆词**，是原文 PDF 在音节边界插了**软连字符 U+00AD**：渲染时看不见，提取出来却成了可见短横（实测 `g\u00adel\u00ad-p\u00ader\u00adme\u00adation`，去掉 U+00AD 正是 `gel-permeation`）。**提取阶段就删掉 U+00AD 与零宽字符（U+200B/200C/200D/FEFF/2060）** —— 不删的话模型会照着坏英文翻，译文跟着烂 |
 | `--windowed` 打包后一启动就退出，连日志都没有 | 无控制台时 `sys.stdout` 是 `None`，第三方库在 import 阶段写它就崩。**改用 `--console` + 运行时钩子隐藏窗口**，并给 stdout 兜底 |
 | 单文件版报 `Could not create temporary directory!` | 单文件每次运行都要把约 140 MB 解包到**临时目录**。临时目录不可写时直接失败——实测把它放在某些受限目录下必现。**日常用目录版**（不依赖临时目录）；单文件版只当转发用，碰到这个报错就换目录版 |
 | 中文目录下报 `NOT_FOUND: …sentencepiece.model`（文件明明在） | sentencepiece 的 C++ 实现用窄字符 API，打不开非 ASCII 路径。**先 chdir 进模型目录再用相对名加载** |

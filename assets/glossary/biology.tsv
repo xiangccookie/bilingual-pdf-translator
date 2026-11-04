@@ -148,3 +148,9 @@ Seurat	Seurat	R 包名，保留原文
 pROC	pROC	R 包名，保留原文	
 WGCNA	WGCNA	R 包名，保留原文	
 CIBERSORT	CIBERSORT	工具名，保留原文	
+# ---- 2026-11-05 补：木质纤维素/解构（实测错译：利格宁、立克宁、母草素、脱构）----
+lignin	木质素		利格宁;立克宁
+hemicellulose	半纤维素		母草素
+cellulose	纤维素		
+lignocellulose	木质纤维素		生物液化纤维素
+deconstruction	解构		脱构

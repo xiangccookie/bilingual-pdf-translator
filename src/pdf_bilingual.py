@@ -164,8 +164,19 @@ TOP_BAND, BOTTOM_BAND = 70.0, 720.0
 # 1. 文字提取（解决坑 2 / 坑 3 / 坑 4）
 # ============================================================================
 
+# 不产生可见字形的"隐形字符"：
+#   U+00AD 软连字符（soft hyphen）—— 排版软件在音节边界插入，**渲染时通常看不见**，
+#           但提取出来会变成可见短横，把词拆碎（实测 Nature Microbiology 那篇）：
+#             g\u00adel\u00ad-p\u00ader\u00adme\u00adation → 看着像 g-el-p-er-me-ation
+#           去掉 U+00AD 后正是 gel-permeation（中间的 - 是文中真有的连字符）
+#   U+200B/200C/200D 零宽空格/连接符、U+FEFF 零宽不换行空格、U+2060 word joiner
+# 这些字符对读者没有信息，留着只会污染译文与检索，所以在**提取阶段**就删掉。
+_INVISIBLE_RE = re.compile("[\u00ad\u200b\u200c\u200d\ufeff\u2060]")
+
+
 def _norm_ligatures(s: str) -> str:
-    """把连字与花引号还原成普通字符"""
+    """把隐形字符删掉、把连字与花引号还原成普通字符"""
+    s = _INVISIBLE_RE.sub("", s)          # 先删隐形字符：不删的话下面的替换也会被隔断
     for k, v in LIGATURES.items():
         s = s.replace(k, v)
     return s
@@ -679,6 +690,57 @@ def clean_sp_mark(s):
     return re.sub(r"[ \t]{2,}", " ", s)
 
 
+# 被拆碎的英文词：≥3 段、用 ' 或 - 连接（如 g-el-p-er-me-ation、Ne'oc'al'li'…）
+_FRAG_RE = re.compile(r"[A-Za-z]+(?:['\-][A-Za-z]+){2,}")
+
+
+def _frag_parts(tok):
+    return re.split(r"['\-]", tok)
+
+
+def _norm_word(tok):
+    return re.sub(r"['\-]", "", tok).lower()
+
+
+def restore_english_fragments(zh, en):
+    """把译文里被拆碎的英文还原成**英文原句里的写法**。
+
+    现象（实测，本地 Argos 模型）：罕见词会被吐成碎片 ——
+      gel-permeation        → g-el-p-er-me-ation
+      Neocallimastigomycetes→ Ne'oc'al'li'ma's't'ig'om'ycetes
+    这些碎片会留在中文译文里，看着像乱码。
+
+    做法：从**同一块的英文原文**建「去掉分隔符的小写 → 原写法」索引，
+    译文里的碎片照索引换回原词（于是连原来的连字符、大小写都一起复原）。
+
+    怎么区分"碎片"和"真词组"：真词组的段都长 —— well-documented、p-coumaric、
+    O'Malley、rock'n'roll 的短段占比都低；碎片的特征是"一堆 1–2 个字母的段"。
+    所以判据是：≥3 段、且 ≥60% 的段只有 1–2 个字母、且不含数字。
+    找不到对应英文时，至少把分隔符去掉（比 g-el-p-er-me-ation 可读）。
+    """
+    if not zh or not _FRAG_RE.search(zh):
+        return zh
+
+    index = {}
+    if en:
+        for w in re.findall(r"[A-Za-z][A-Za-z'\-]+", en):
+            index.setdefault(_norm_word(w), w)
+
+    def _rep(m):
+        tok = m.group(0)
+        if re.search(r"\d", tok):
+            return tok
+        parts = _frag_parts(tok)
+        if len(parts) < 3:
+            return tok
+        short = sum(1 for p in parts if len(p) <= 2)
+        if short / float(len(parts)) < 0.6:
+            return tok
+        return index.get(_norm_word(tok)) or "".join(parts)
+
+    return _FRAG_RE.sub(_rep, zh)
+
+
 def _zh_same_as_en(a, b):
     """译文与英文几乎相同？—— 人名、拉丁学名、编号这类"原文照抄"的片段
 
@@ -1055,7 +1117,8 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
                     # 逐句去重：这一句的中文与英文实质相同（人名/拉丁名/编号）
                     # 就不要再印一遍，否则会变成 "Susanne S.，Susanne S. Renner1…"
                     if cz and not _zh_same_as_en(e, cz):
-                        parts.append(sep_for(e) + _rich(clean_sp_mark(cz), species))
+                        parts.append(sep_for(e) + _rich(
+                            restore_english_fragments(clean_sp_mark(cz), e), species))
                     parts.append(" ")          # 句间空格：免得中文句号直接贴下一句英文
                 return Paragraph("".join(parts).rstrip(), S[style])
             if len(ens) != len(zs):
@@ -1064,7 +1127,8 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
             z = "".join(zs)
         z = (z or "").strip()
         en = b["text"].rstrip()
-        return Paragraph(wrap_en(en) + (sep_for(en) + _rich(clean_sp_mark(z), species) if z else ""),
+        return Paragraph(wrap_en(en) + (sep_for(en) + _rich(
+            restore_english_fragments(clean_sp_mark(z), b["text"]), species) if z else ""),
                          S[style])
 
     def emit(b, text=True):
