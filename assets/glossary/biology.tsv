@@ -126,9 +126,9 @@ correlation analysis	相关性分析		关联性分析
 statistically significant	有统计学意义	例：差异有统计学意义	统计显著
 P < 0.05	P < 0.05	数字必须原样保留	
 gold standard	金标准	例：gold standard 金标准	金本位;黄金标准
-curation	整理	数据整理	策展;管理
-specimen	标本		光谱;样本;样品
-specimens	标本	复数	光谱;样本;样品
+curation	整理	数据整理	策展
+specimen	标本		光谱
+specimens	标本	复数	光谱
 sample	样本		样品
 sequencing	测序		定序
 alignment	比对	序列比对	对齐
@@ -176,12 +176,6 @@ read count	读段计数	组学	读取计数
 alignment rate	比对率	组学	对齐率
 taxonomic	分类学的	分类学	
 phylum	门	分类学：分类阶元	
-class	纲	分类学：分类阶元	
-order	目	分类学：分类阶元	
-family	科	分类学：分类阶元	
-genus	属	分类学：分类阶元	类属
-species	种	分类学：分类阶元	
-subspecies	亚种	分类学：分类阶元	
 paratype	副模标本	分类学	副模式
 neotype	新模式标本	分类学	新模标本
 type species	模式种	分类学	
@@ -194,3 +188,62 @@ sister group	姐妹群	分类学
 internal transcribed spacer	内转录间隔区	分类学	
 DNA barcode	DNA 条形码	分类学	
 reference genome	参考基因组	组学	
+medicinal product	药品	监管：本库最高频术语	药用产品;医药产品
+product	产品	监管：兜底，engine 曾把 products 译成「螺旋桨」	螺旋桨
+marketing authorisation	上市许可	监管	销售授权;销售许可;营销授权;市场授权
+marketing authorisation holder	上市许可持有人	监管	销售授权持有者;销售许可持有人
+marketing authorisation application	上市许可申请	监管	销售授权申请
+conditional marketing authorisation	附条件上市许可	507/2006	有条件销售;有条件上市许可
+generic medicinal product	仿制药	监管	通用药用产品;通用药品
+reference medicinal product	参比制剂	监管：仿制药对照物	参考药用产品;参考药品
+orphan medicinal product	孤儿药	141/2000	孤儿药用产品
+investigational product	试验用药品	临床	调查产品;研究产品
+active substance	活性物质	监管	活性成分;有效成分
+excipient	辅料	药学	释放物;赋形剂;辅药
+pharmaceutical form	剂型	监管	药物形式;药剂形式
+route of administration	给药途径	监管；实测整句译作「管理方法和途径」	管理方法;管理途径;行政途径
+posology	用法用量	SmPC 第 4.2 节标题；engine 曾译「病理学」	病理学;剂量学
+shelf life	有效期	监管；实测整句译作「架床」	架床;保存寿命;货架寿命
+summary of product characteristics	产品特性摘要	SmPC	产品特性概要
+package leaflet	说明书	与 labelling 并列	包装传单;包装说明书
+labelling	标签	监管	标签标示;标记
+therapeutic indication	治疗适应症	监管核心：适应症；实测整句译作「治疗迹象」	治疗迹象;治疗性说明;治疗指示
+contraindication	禁忌症	监管；实测整句译作「反迹象」	禁药;反迹象;反指示
+contra-indication	禁忌症	连字符写法（本库实际用法）；实测整句译作「反迹象」	禁药;反迹象;反指示
+adverse reaction	不良反应	药物警戒	逆向反应;相反反应
+serious adverse event	严重不良事件	临床	严重逆性事件
+efficacy	疗效	监管：区别于 effectiveness 效果	功效
+risk-benefit balance	获益-风险平衡	监管	风险-效益平衡;风险收益平衡
+pharmacovigilance	药物警戒	监管；engine 曾译「药物监督」	药物监督;药品监督;药典制度
+pharmacovigilance system	药物警戒体系	监管；engine 曾译「药典制度」（药典＝pharmacopoeia）	药典制度;药物监督制度
+risk management plan	风险管理计划	监管	风险管理方案
+periodic safety update report	定期安全性更新报告	药物警戒	定期安全更新报告
+off-label use	超说明书用药	临床	标签外使用;非标签使用
+clinical trial	临床试验	clinical：engine 曾把 trial 译成「审判」	临床审判
+trial protocol	试验方案	临床；engine 曾译「审判规程」	审判规程
+trial subject	试验受试者	临床；engine 曾译「审判对象」	审判对象
+informed consent	知情同意	临床	
+blinding	盲法	临床	致盲;遮蔽
+placebo	安慰剂	临床	安慰药
+endpoint	终点	临床	端点;末端
+surrogate endpoint	替代终点	临床	代理终点;代孕终点
+non-inferiority	非劣效性	统计	不劣性;非低劣性
+intention-to-treat	意向性治疗	统计	治疗意向
+bioequivalence	生物等效性	药学；engine 曾译「生物等同性」	生物等同性;生物等值性
+bioavailability	生物利用度	药学；engine 曾译「生物利用率」	生物利用率
+prevalence	患病率	141/2000 罕见病阈值即按患病率	流行程度;流行率
+centralised procedure	集中程序	726/2004	中央程序
+mutual recognition procedure	互认程序	监管	相互承认程序
+decentralised procedure	非集中程序	监管；engine 曾译「权力下放程序」	权力下放程序;分散程序
+competent authority	主管当局	监管	有能力当局;权限机关
+Member State	成员国	监管	会员国
+data exclusivity	数据独占	监管：亦作数据专有权	数据排他性
+marketing protection	市场保护	1901/2006 第 36 条	营销保护
+supplementary protection certificate	补充保护证书	SPC	辅助保护证书
+variation	变更	上市后变更	变异;变化
+withdrawal	撤市	监管	退药
+paediatric	儿科的	1901/2006	小儿科的
+paediatric investigation plan	儿科研究计划	PIP	儿科调查计划
+waiver	豁免	1901/2006	弃权
+deferral	延期	1901/2006	递延;推迟
+method and route of administration	给药方法与给药途径	SmPC 第 4.2 节标题；实测整句译作「管理方法和途径」	管理方法和途径
