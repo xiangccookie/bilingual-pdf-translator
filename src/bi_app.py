@@ -668,6 +668,53 @@ def _clean_plain_title(t):
     return t
 
 
+TITLE_OVERRIDE_NAME = "标题中文.json"
+
+
+def _title_override(en_title):
+    """查「标题中文.json」里有没有人工指定的中文标题；没有就返回空串。
+
+    为什么需要这个入口（2026-11-15 用户提的）
+    ---------------------------------------
+    本地模型译标题特别容易漏主语：`Lignin deconstruction by anaerobic fungi`
+    被译成「由厌氧真菌解构而来」（丢了 Lignin）。而术语表只能在**整词层面**
+    做替换，译文里连"木质素"都没有时无从下手 —— 这类整句错只能人工钉死。
+    标题又是全文最显眼的一行，所以给它开一个可覆盖的后门。
+
+    文件：<数据目录>\\标题中文.json，形如
+        {"Lignin deconstruction by anaerobic fungi": "厌氧真菌对木质素的解构"}
+    匹配：两边都去首尾空白、忽略大小写、**完全相等**才算命中（不做模糊匹配，
+          免得张冠李戴）。文件不存在时自动写一份带示例的模板，方便用户照着改。
+    """
+    path = os.path.join(_data_dir(), TITLE_OVERRIDE_NAME)
+    if not os.path.exists(path):
+        try:
+            tpl = {
+                "_说明": "英文原题 → 人工中文标题。命中的直接用它；没命中的走机器翻译。"
+                         "键要做首尾去空格、忽略大小写后完全相等才算命中。改完不用重启程序。",
+                "Lignin deconstruction by anaerobic fungi": "厌氧真菌对木质素的解构",
+            }
+            with open(path, "w", encoding="utf-8", newline="\n") as f:
+                json.dump(tpl, f, ensure_ascii=False, indent=1)
+        except Exception:
+            return ""
+        return ""      # 首次只建模板，本次仍走机器翻译
+    try:
+        with open(path, encoding="utf-8") as f:
+            m = json.load(f)
+    except Exception:
+        return ""
+    key = (en_title or "").strip().lower()
+    if not key:
+        return ""
+    for k, v in (m or {}).items():
+        if str(k).startswith("_"):
+            continue
+        if str(k).strip().lower() == key and str(v).strip():
+            return str(v).strip()
+    return ""
+
+
 def run_pipeline(src_pdf, out_pdf, start=None, end=None, sleep=0.3, log=print,
                  progress=None, stop=None, backend="mymemory",
                  translator=None, title_zh="", quiet_engine=False, plain=False):
@@ -757,13 +804,18 @@ def run_pipeline(src_pdf, out_pdf, start=None, end=None, sleep=0.3, log=print,
                     raw = max(cands, key=lambda r: len(r["text"]))["text"].strip()
             title_en_plain = _clean_plain_title(raw)
         # 纯阅读版把标题也译成中文，紧跟在英文原题下面一行。
-        # 有失败兜底：译不出来就只印英文，绝不留一行空白标题。
+        # 顺序：先查「标题中文.json」里的人工指定 → 没有命中才走机器翻译。
+        # 兜底：机器翻译失败时只印英文，绝不留一行空白标题。
         title_zh_plain = ""
         if plain and title_en_plain:
-            try:
-                title_zh_plain = tidy(tr.one(title_en_plain))
-            except Exception:
-                title_zh_plain = ""
+            title_zh_plain = _title_override(title_en_plain)
+            if title_zh_plain:
+                log("  标题中文：取自「%s」（人工指定，未走机器翻译）" % TITLE_OVERRIDE_NAME)
+            else:
+                try:
+                    title_zh_plain = tidy(tr.one(title_en_plain))
+                except Exception:
+                    title_zh_plain = ""
         # ⚠️ 必须把封面文字**作为参数**传给 cmd_build；只写 cfg.json 是不生效的
         #    （那是命令行入口才读的）。踩过：封面标题空白、说明文字丢失。
         pb.cmd_build(tmp, out_pdf, figures={"figures": figs},
