@@ -1412,10 +1412,14 @@ def run_batch(inputs, out_dir, start=None, end=None, sleep=0.3, log=print,
             elif naming == "en":
                 zh_title = en_title
             else:
-                try:
-                    zh_title = tr.one(en_title)
-                except Exception:
-                    zh_title = ""
+                # 文件名也用「标题中文.json」的人工标题 —— 否则成品叫"由厌氧真菌解构而来"，
+                # 而正文标题却是"厌氧真菌对木质素的解构"，同一份文件两个名字对不上（实测）。
+                zh_title = _title_override(en_title)
+                if not zh_title:
+                    try:
+                        zh_title = tr.one(en_title)
+                    except Exception:
+                        zh_title = ""
                 if not zh_title or zh_title.strip() == en_title.strip():
                     zh_title = en_title           # 翻译失败就用英文标题当名字
             log("  取名为：%s" % zh_title[:90])
