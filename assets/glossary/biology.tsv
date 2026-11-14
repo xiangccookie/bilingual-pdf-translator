@@ -10,6 +10,15 @@
 # 加词的方法：照着下面的格式加一行，保存，重开程序即可（无需重新打包）。
 #
 # --- 分类学 / 命名法规 -------------------------------------------------------
+
+# --- 组学 / 生物信息学 -------------------------------------------------------
+
+# --- 临床 / 疾病 -------------------------------------------------------------
+
+# --- 统计 / 方法学 -----------------------------------------------------------
+
+# --- 数据库 / 软件名（保留原文，防止被译成中文）--------------------------------
+# ---- 2026-11-05 补：木质纤维素/解构（实测错译：利格宁、立克宁、母草素、脱构）----
 type strain	模式菌株	分类学：代表该分类单元的模式菌株	类型菌株;种类菌株;菌株类型
 type strains	模式菌株	复数形式	类型菌株;种类菌株;种类的菌株
 type specimen	模式标本	分类学	模式样本;类型标本
@@ -40,8 +49,6 @@ fungus	真菌		霉菌
 fungi	真菌	复数	霉菌
 Helicobacter pylori	幽门螺杆菌	病原学（斜体拉丁名保留拉丁文亦可）	幽门螺旋菌
 Colletotrichum	炭疽菌属	属名，保留拉丁文	炭疽病菌
-
-# --- 组学 / 生物信息学 -------------------------------------------------------
 bioinformatics	生物信息学		生物资讯学
 in silico	计算机模拟	例：in silico analysis 计算机模拟分析	硅酸盐;在硅化物中;硅胶里
 in vitro	体外	实验类型	在玻璃中
@@ -81,8 +88,6 @@ methylation	甲基化		甲基化修饰
 m6A	RNA 甲基化	m6A（N6-甲基腺苷）修饰	M6A
 non-coding RNA	非编码 RNA		非编码核糖核酸
 long non-coding RNA	长链非编码 RNA	lncRNA	长的非编码RNA
-
-# --- 临床 / 疾病 -------------------------------------------------------------
 gastric cancer	胃癌	GC	胃的癌症
 gastric adenocarcinoma	胃腺癌		胃的腺癌
 hepatocellular carcinoma	肝细胞癌	HCC	肝细胞癌变
@@ -102,9 +107,7 @@ overall survival	总生存期	OS	整体存活
 biopsy	活检		活组织检查
 immunohistochemistry	免疫组织化学	IHC	免疫组织化学染色法
 quantitative real-time PCR	实时定量 PCR	qRT-PCR	定量实时PCR
-
-# --- 统计 / 方法学 -----------------------------------------------------------
-p value	P 值		 P值（大小写可统一）
+p value	P 值		P值（大小写可统一）
 hazard ratio	风险比	HR	危险比;人力资源;危险比率;危险率
 odds ratio	比值比	OR	优势比
 confidence interval	置信区间	CI	可信区间;置信间隔
@@ -133,8 +136,6 @@ annotate	注释	基因注释	标注
 database	数据库		资料库
 repository	数据库/保藏库	例：culture repository 菌种保藏库	仓库
 culture collection	菌种保藏中心	例：CBS 128530	培养物收集
-
-# --- 数据库 / 软件名（保留原文，防止被译成中文）--------------------------------
 GenBank	GenBank	数据库名，保留原文	基因银行;基因库
 RefSeq	RefSeq	数据库名，保留原文	参考序列
 NCBI	NCBI	机构名，保留原文	
@@ -148,9 +149,48 @@ Seurat	Seurat	R 包名，保留原文
 pROC	pROC	R 包名，保留原文	
 WGCNA	WGCNA	R 包名，保留原文	
 CIBERSORT	CIBERSORT	工具名，保留原文	
-# ---- 2026-11-05 补：木质纤维素/解构（实测错译：利格宁、立克宁、母草素、脱构）----
 lignin	木质素		利格宁;立克宁
 hemicellulose	半纤维素		母草素
 cellulose	纤维素		
 lignocellulose	木质纤维素		生物液化纤维素
 deconstruction	解构		脱构
+genomics	基因组学	组学	
+transcriptomics	转录组学	组学	
+proteomics	蛋白质组学	组学	
+metabolomics	代谢组学	组学	
+lipidomics	脂质组学	组学	
+epigenomics	表观基因组学	组学	
+metagenomics	宏基因组学	组学	
+metatranscriptomics	宏转录组学	组学	
+metaproteomics	宏蛋白质组学	组学	
+RNA sequencing	RNA 测序	组学	核糖核酸测序
+whole-genome sequencing	全基因组测序	组学	全基因组定序
+whole-genome resequencing	全基因组重测序	组学	
+next-generation sequencing	二代测序	组学	下一代测序
+third-generation sequencing	三代测序	组学	
+genome-wide association study	全基因组关联分析	组学	全基因组关联研究
+differentially expressed gene	差异表达基因	组学	
+batch effect	批次效应	组学	
+sequencing depth	测序深度	组学	
+read count	读段计数	组学	读取计数
+alignment rate	比对率	组学	对齐率
+taxonomic	分类学的	分类学	
+phylum	门	分类学：分类阶元	
+class	纲	分类学：分类阶元	
+order	目	分类学：分类阶元	
+family	科	分类学：分类阶元	
+genus	属	分类学：分类阶元	类属
+species	种	分类学：分类阶元	
+subspecies	亚种	分类学：分类阶元	
+paratype	副模标本	分类学	副模式
+neotype	新模式标本	分类学	新模标本
+type species	模式种	分类学	
+phylogenetic tree	系统发育树	分类学	系统发生树;进化树
+phylogenetic analysis	系统发育分析	分类学	
+monophyletic	单系的	分类学	
+paraphyletic	并系的	分类学	
+polyphyletic	多系的	分类学	
+sister group	姐妹群	分类学	
+internal transcribed spacer	内转录间隔区	分类学	
+DNA barcode	DNA 条形码	分类学	
+reference genome	参考基因组	组学	
