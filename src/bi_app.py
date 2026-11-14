@@ -853,7 +853,8 @@ def run_gui_single():
 
     def pick_in():
         p = filedialog.askopenfilename(title="选择英文 PDF",
-                                       filetypes=[("PDF 文件", "*.pdf"), ("全部", "*.*")])
+                                       filetypes=[("PDF / 文本", "*.pdf *.txt"), ("PDF 文件", "*.pdf"),
+                                         ("文本文件", "*.txt"), ("全部", "*.*")])
         if p:
             v_in.set(p)
             if not v_out.get():
@@ -868,7 +869,7 @@ def run_gui_single():
 
     def pick_out():
         p = filedialog.asksaveasfilename(title="保存为", defaultextension=".pdf",
-                                         filetypes=[("PDF 文件", "*.pdf")])
+                                         filetypes=[("PDF / 文本", "*.pdf *.txt")])
         if p:
             v_out.set(p)
 
@@ -1114,6 +1115,215 @@ def build_translator(backend, cache_path, sleep, log, stop, use_glossary=True):
 
 
 
+# ---------------------------------------------------------------- 纯文本输入
+# 用户 2026-11-15 要求：只出 PDF，但要能喂 .txt。
+# 做法是**复用** PDF 那套排版（pb.cmd_build）与翻译器，只换掉输入侧的读取与切段。
+TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "gb18030", "utf-16")
+
+
+def read_text_auto(path):
+    """读 .txt，自动判断编码，返回 (文本, 用了哪个编码的名字)。
+
+    为什么不能直接 utf-8：中文 txt 一半是 UTF-8、一半是 GBK/GB18030。编码猜错**不报错**，
+    只会得到满屏乱码（典型的"静默出错"）。所以按顺序试，用"解出多少个替换符 U+FFFD"
+    判断这次解码可不可信；全都带坏字符时挑坏得最少的那个。
+    """
+    raw = open(path, "rb").read()
+    if not raw:
+        return "", "(空文件)"
+    best = None                                   # (文本, 坏字符数, 编码名)
+    for enc in TEXT_ENCODINGS:
+        try:
+            t = raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+        bad = t.count("\ufffd")
+        if bad == 0:
+            return t, enc
+        if best is None or bad < best[1]:
+            best = (t, bad, enc)
+    if best:
+        return best[0], "%s（有 %d 个字符解不出）" % (best[2], best[1])
+    return raw.decode("utf-8", errors="replace"), "utf-8（强制）"
+
+
+def split_paragraphs(text):
+    """把纯文本切成段落：**空行**是唯一的分段依据，段内的单换行合并成空格。
+
+    为什么要合并：英文 txt 常按 72–80 列硬换行，一句话被折成三行；
+    不合并的话每行都当独立段落去翻译，句子被切碎，译文质量明显下降。
+    """
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    paras, buf = [], []
+    for ln in text.split("\n"):
+        if ln.strip():
+            buf.append(ln.strip())
+        elif buf:
+            paras.append(" ".join(buf))
+            buf = []
+    if buf:
+        paras.append(" ".join(buf))
+    return paras
+
+
+def _looks_like_heading(para):
+    """保守判断一个段落是不是小标题。
+
+    全部满足才算：长度 ≤ 80、没有句末标点、且"像编号"或"每个实词首字母都大写"。
+    故意保守 —— 把正文误判成标题，它在成品里会变成大字加粗，比漏判难受得多。
+    """
+    t = (para or "").strip()
+    if not (0 < len(t) <= 80):
+        return False
+    if t[-1] in ".!?,;:。，；：" or t.count(". ") >= 2:
+        return False                                  # 有句末标点 / 多个句号 → 是正文
+    if re.match(r"^(\d+(\.\d+)*\.?|[IVX]+\.)\s+\S", t):
+        return True                                   # "1 Introduction" / "2.1 xxx" / "IV. xxx"
+    words = [w for w in re.findall(r"[A-Za-z][A-Za-z\-']+", t) if len(w) > 2]
+    if not words:
+        return False
+    return all(w[0].isupper() for w in words)
+
+
+def _degenerate(zh, run_max=6):
+    """检测神经机器翻译的"重复退化"：同一个字连续出现 run_max 次以上。
+
+    实测（本机模型，稳定复现）：
+      'Anaerobic fungi are able to deconstruct lignin.' → '厌氧真菌能分解取出出出出出出…'
+    整段是一行同一个字。这类输出必须拦掉，否则会原样印进成品。
+    """
+    return bool(re.search(r"(.)\1{%d,}" % max(1, run_max - 1), zh or ""))
+
+
+def translate_one_safely(translator, text, log=None):
+    """翻一句，遇到重复退化就重试一次（去掉句末标点），还不行就返回空串（调用方保留英文）。"""
+    try:
+        zh = translator.one(text)
+    except Exception:
+        return "", "翻译异常"
+    if not _degenerate(zh):
+        return zh, ""
+    alt = text.rstrip(".!?;: 　")
+    if alt and alt != text:
+        try:
+            zh2 = translator.one(alt)
+        except Exception:
+            zh2 = ""
+        if zh2 and not _degenerate(zh2):
+            return zh2, "重复退化已修复（去句末标点重译）"
+    if log:
+        log("  ⚠ 重复退化，保留英文：%s" % text[:60])
+    return "", "重复退化，保留英文"
+
+
+def text_title(path, limit=200):
+    """纯文本的"标题"：第一段（够短才当标题），否则返回空串（由调用方退回用文件名）。"""
+    try:
+        text, _enc = read_text_auto(path)
+    except Exception:
+        return ""
+    for p in split_paragraphs(text):
+        if len(p) >= 2:
+            return p if len(p) <= limit else ""
+    return ""
+
+
+def run_text_pipeline(src_txt, out_pdf, log=print, backend="local", translator=None,
+                      stop=None, title_zh="", plain=True):
+    """纯文本 → 双语 PDF：一句英文紧跟一句中文。
+
+    与 PDF 流程共用同一套排版与同一个翻译器（含术语校正），差别只有三处：
+      1. 输入：段落 = 空行分隔；段内按句切分后逐句交替（这就是"一句英文一句中文"）；
+      2. plain_trim=False：**不裁"摘要之前"**。纯文本没有期刊页眉/作者栏，
+         那条规则只会把正文开头整段误删；
+      3. 引用区（References 那行之后）保留英文原文不翻译，与 PDF 版一致。
+    """
+    text, enc = read_text_auto(src_txt)
+    paras = [p for p in split_paragraphs(text) if len(p) >= 2]
+    log("  文本编码：%s，%d 字符，%d 段" % (enc, len(text), len(paras)))
+    if not paras:
+        raise RuntimeError("这个文件里没有可翻译的文字（只有空行？）")
+
+    first = paras[0]
+    title_en = first if len(first) <= 200 else os.path.splitext(os.path.basename(src_txt))[0]
+
+    if translator is None:
+        # 自己建翻译器时必须和 PDF 流程一样套上术语校正，
+        # 否则同样一句话在 txt 里译出"利格宁"、在 PDF 里却是"木质素"（实测踩到）
+        translator = build_translator(backend, "", 0.3, log, stop)
+
+    recs, zh_map = [], {}
+    in_refs = False
+    ok_n = fail_n = 0
+    for i, para in enumerate(paras, 1):
+        if stop and stop():
+            raise RuntimeError("已取消")
+        bid = "B%03d" % i
+        is_head = _looks_like_heading(para)
+        # 第一段常常就是标题本身 —— 封面已经印了「英文题 + 中文题」，
+        # 这里再当正文块输出一遍就是重复（实测确实重复了），所以跳过
+        if i == 1 and para.strip() == title_en.strip():
+            continue
+        if pb.REF_HEAD_RE.match(para.strip()):
+            in_refs = True
+        # 引用区放到"第 2 页"：cmd_build 用"每页 ref 块多于翻译块"来判定引用页，
+        # 全塞第 1 页会让整份文档被误判成参考文献页（那样正文就全不翻了）
+        page = 2 if in_refs else 1
+        recs.append({"id": bid, "page": page,
+                     "kind": "head" if is_head else "body",
+                     "action": "ref" if in_refs else "translate",
+                     "text": para,
+                     "col": "span",           # 纯文本是单栏；reading_order() 靠这个键排序
+                     "x0": 0.0, "x1": 520.0,
+                     "y0": float(i * 24), "y1": float(i * 24 + 20),
+                     "hlevel": 1 if is_head else 0,
+                     "whole": is_head})
+        if in_refs:
+            continue                                  # 引用保留英文，不翻
+        zs = []
+        # 标题整条翻，**不切句**：切句会把 "1. Introduction" 切成 ['1.', 'Introduction']，
+        # 而单独一个 "1." 会被模型译成 "1. 国家"（实测），成品就变成"1. 1. 国家 Introduction，导言"
+        units = [para] if is_head else pb.split_sentences(para)
+        for s in units:
+            z, why = translate_one_safely(translator, s, log=log)
+            zs.append(tidy(z) if z else "")
+            if z:
+                ok_n += 1
+            else:
+                fail_n += 1
+                if why:
+                    log("    · %s：%s" % (why, s[:60]))
+        zh_map[bid] = zs
+    log("  本篇：成功 %d 句 / 失败(保留英文) %d 句" % (ok_n, fail_n))
+
+    # 标题中文：先查人工指定，再退机器翻译（与 PDF 流程同一条规则）
+    if not title_zh:
+        title_zh = _title_override(title_en)
+        if title_zh:
+            log("  标题中文：取自「%s」（人工指定，未走机器翻译）" % TITLE_OVERRIDE_NAME)
+        else:
+            try:
+                title_zh = tidy(translator.one(title_en))
+            except Exception:
+                title_zh = ""
+
+    tmp = tempfile.mkdtemp(prefix="txt2bil_")
+    try:
+        os.makedirs(os.path.join(tmp, "zh"), exist_ok=True)
+        with open(os.path.join(tmp, "doc_model.json"), "w",
+                  encoding="utf-8", newline="\n") as f:
+            json.dump(recs, f, ensure_ascii=False, indent=1)
+        with open(os.path.join(tmp, "zh", "batch_01.json"), "w",
+                  encoding="utf-8", newline="\n") as f:
+            json.dump(zh_map, f, ensure_ascii=False, indent=1)
+        pb.cmd_build(tmp, out_pdf, figures={"figures": []},
+                     title_zh=title_zh, title_en=title_en,
+                     source_line="双语对照（机器翻译）", cover_note="",
+                     plain=plain, plain_trim=False)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # ---------------------------------------------------------------- 术语表
 _GLOSSARY = None          # 全局术语表（首次用到时载入）
 _GLOSSARY_TRIED = False
@@ -1188,10 +1398,13 @@ def run_batch(inputs, out_dir, start=None, end=None, sleep=0.3, log=print,
         if progress_file:
             progress_file(idx - 1, len(inputs), os.path.basename(src))
         try:
+            is_txt = src.lower().endswith((".txt", ".text"))
             # ① 取英文标题 → 按所选方式定文件名
-            en_title = extract_title(src)
+            en_title = text_title(src) if is_txt else extract_title(src)
             if en_title:
                 log("  英文标题：%s" % en_title[:90])
+            elif is_txt:
+                log("  （纯文本：首页没有短标题行，用文件名当标题）")
             else:
                 log("  ⚠ 没找到标题")
             if naming == "orig" or not en_title:
@@ -1209,9 +1422,13 @@ def run_batch(inputs, out_dir, start=None, end=None, sleep=0.3, log=print,
             stem = sanitize_filename(zh_title) or os.path.splitext(os.path.basename(src))[0]
             dst = unique_path(out_dir, stem)
             # ② 翻译 + 合成
-            run_pipeline(src, dst, start, end, sleep, log=log, progress=progress,
-                         stop=stop, backend=backend, translator=tr,
-                         title_zh=stem, quiet_engine=True, plain=plain)
+            if is_txt:
+                run_text_pipeline(src, dst, log=log, backend=backend, translator=tr,
+                                  stop=stop, title_zh="", plain=True)
+            else:
+                run_pipeline(src, dst, start, end, sleep, log=log, progress=progress,
+                             stop=stop, backend=backend, translator=tr,
+                             title_zh=stem, quiet_engine=True, plain=plain)
             results.append((src, dst, True, ""))
             log("  ✅ 输出：%s" % dst)
         except Exception as e:
@@ -1289,7 +1506,8 @@ def run_gui(selftest=False):
 
     def add_files():
         ps = filedialog.askopenfilenames(title="选择英文 PDF（可按住 Ctrl 多选）",
-                                         filetypes=[("PDF 文件", "*.pdf"), ("全部", "*.*")])
+                                         filetypes=[("PDF / 文本", "*.pdf *.txt"), ("PDF 文件", "*.pdf"),
+                                         ("文本文件", "*.txt"), ("全部", "*.*")])
         for p in ps:
             if p not in files:
                 files.append(p)
@@ -1299,7 +1517,7 @@ def run_gui(selftest=False):
         d = filedialog.askdirectory(title="选择一个文件夹（会加入其中所有 PDF）")
         if not d:
             return
-        got = sorted(f for f in os.listdir(d) if f.lower().endswith(".pdf"))
+        got = sorted(f for f in os.listdir(d) if f.lower().endswith((".pdf", ".txt")))
         for f in got:
             p = os.path.join(d, f)
             if p not in files:

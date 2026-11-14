@@ -824,7 +824,7 @@ ABSTRACT_RE = re.compile(r"^\s*(?:\d+\s*[.、]?\s*)?(abstract|summary)\b", re.I)
 
 def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
               title_zh="", title_en="", source_line="", cover_note="", mid_x=MID_X,
-              plain=False):
+              plain=False, plain_trim=True):
     """把译文合成为中英对照 PDF
 
     plain=True → 纯阅读版（用户 2026-11-05 定），与默认版的差别只有排版层：
@@ -1096,6 +1096,11 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
             return SEP_TAIL if SENT_END_RE.search(e.rstrip()) else SEP_OPEN
 
         z = ZH.get(b["id"], "")
+        if b.get("whole") and isinstance(z, list):
+            # 整块对照：不逐句拆。纯文本输入的小标题走这条 ——
+            # 标题被切句会变成 ['1.', 'Introduction']，而单独一个 "1." 会被模型译成
+            # "1. 国家"（实测），成品就成了"1. 1. 国家 Introduction，导言"。
+            z = "".join(str(x).strip() for x in z)
         if isinstance(z, list):
             ens = split_sentences(b["text"])
             zs = [str(x).strip() for x in z]
@@ -1198,7 +1203,9 @@ def cmd_build(workdir, out_pdf, glossary=None, figures=None, species=None,
         return None
 
     drop_ids = set()
-    if plain:
+    # plain_trim=False 时不裁掉"摘要之前"的内容 —— 纯文本输入没有期刊页眉/作者栏，
+    # 那条规则只会误删正文开头（见 bi_app.run_text_pipeline）
+    if plain and plain_trim:
         _start = _find_plain_start()
         if _start:
             _flat = []
